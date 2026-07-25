@@ -1,8 +1,11 @@
 node_modules/
 dist/
 build/
+# Every .env variant except the committed examples — .env.turso holds a live
+# database token.
 .env
-.env.local
+.env.*
+!.env.example
 *.log
 .DS_Store
 .vscode/
