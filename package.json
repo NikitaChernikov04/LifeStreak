@@ -1,0 +1,14 @@
+{
+  "name": "lifestreak",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LifeStreak — Telegram Mini App. Frontend and API deploy together on Vercel.",
+  "scripts": {
+    "install:all": "npm --prefix backend ci && npm --prefix frontend ci",
+    "build:backend": "npm --prefix backend run prisma:generate && npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "vercel-build": "npm run build:backend && npm run build:frontend",
+    "db:migrate": "npm --prefix backend run db:migrate",
+    "db:seed": "npm --prefix backend run prisma:seed"
+  }
+}

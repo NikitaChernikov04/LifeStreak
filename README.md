@@ -8,12 +8,13 @@ Telegram Mini App, превращающая жизнь пользователя 
 
 ```
 LifeStreak/
-├── backend/          # NestJS + SQLite (libSQL) + Prisma
+├── api/              # точка входа Vercel Function (реэкспорт из backend/dist)
+├── backend/          # NestJS + SQLite (libSQL/Turso) + Prisma
 │   ├── prisma/
 │   │   ├── migrations/
 │   │   ├── schema.prisma
 │   │   └── seed.ts
-│   ├── fly.toml
+│   ├── scripts/      # apply-schema.mjs — миграции для libsql://
 │   └── src/
 │       ├── modules/  # auth, users, streaks, hearts, challenges, achievements,
 │       │              # statistics, invites, notifications, health
@@ -28,6 +29,7 @@ LifeStreak/
 │       ├── hooks/        # React Query хуки по фичам
 │       ├── store/        # Zustand: auth, celebrations
 │       └── lib/          # api client, telegram sdk wrapper, utils
+├── vercel.json       # сборка и роутинг: /api/* → функция, остальное → SPA
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -84,111 +86,85 @@ npm run dev
 
 ## Деплой
 
-Схема: **бэкенд на Fly.io** (SQLite-файл на постоянном томе), **фронтенд на
-Vercel**, Telegram Mini App смотрит на домен Vercel.
+Фронтенд и API живут **в одном проекте Vercel**, база — в **Turso**
+(SQLite as a service). Ни один из сервисов не требует карты.
 
-Шаги идут именно в этом порядке: адрес бэкенда нужен фронтенду при сборке, а
-адрес фронтенда нужен бэкенду для CORS.
+Так как фронт и API на одном домене, CORS не участвует вовсе, а
+`VITE_API_URL` — относительный путь `/api/v1` (задан в `vercel.json`).
 
-### 1. Бэкенд на Fly.io
+### Как это устроено
+
+```
+api/index.ts            → Vercel Function: реэкспорт скомпилированного Nest
+backend/src/serverless.ts → тот же AppModule без listen(), с кэшем между вызовами
+frontend/dist           → статика, отдаётся с того же домена
+```
+
+NestJS собирается обычным `tsc` (`nest build`) **до** упаковки функции: Vercel
+собирает функции через esbuild, который не умеет `emitDecoratorMetadata`, и без
+предварительной сборки DI бы развалилась.
+
+### 1. База данных в Turso
+
+Создайте аккаунт на [turso.tech](https://turso.tech) (вход через GitHub) и
+базу. Понадобятся две вещи: **URL базы** (`libsql://<db>-<org>.turso.io`) и
+**auth token**.
+
+Примените схему и справочные данные — обе команды идемпотентны:
 
 ```bash
 cd backend
-fly auth login
-fly launch --no-deploy          # подтвердит имя приложения и регион из fly.toml
-fly volumes create lifestreak_data --size 1 --region fra
+DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run db:migrate
+DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run prisma:seed
 ```
 
-Секреты (в репозиторий они не попадают):
+`db:migrate` (`scripts/apply-schema.mjs`) прогоняет `prisma/migrations/*` и
+отмечает применённое в таблице `_schema_migrations`. Обычный
+`prisma migrate deploy` здесь не подходит — он не работает с `libsql://`.
+
+### 2. Проект на Vercel
+
+Импортируйте репозиторий на [vercel.com/new](https://vercel.com/new).
+**Root Directory оставьте корнем репозитория** — не `frontend`: сборка и
+функции описаны в корневом `vercel.json`.
+
+Переменные окружения (Settings → Environment Variables):
+
+| Переменная | Значение |
+|---|---|
+| `DATABASE_URL` | `libsql://<db>-<org>.turso.io` |
+| `TURSO_AUTH_TOKEN` | токен из Turso |
+| `JWT_SECRET` | случайная строка от 32 символов |
+| `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
+| `TELEGRAM_SKIP_AUTH_VALIDATION` | `false` |
+
+Проверка после деплоя:
 
 ```bash
-fly secrets set \
-  JWT_SECRET="$(openssl rand -base64 48)" \
-  TELEGRAM_BOT_TOKEN="<токен от @BotFather>" \
-  TELEGRAM_SKIP_AUTH_VALIDATION=false
+curl https://<project>.vercel.app/api/v1/health
 ```
 
-```bash
-fly deploy
-fly scale count 1               # см. предупреждение ниже
-fly logs                        # убедитесь, что миграции применились
-curl https://<app>.fly.dev/api/v1/health
-```
+### 3. Подключение к боту
 
-> **Одна машина, всегда.** База — файл SQLite на томе. Два инстанса не могут
-> делить один том, а с разными томами вы получите две независимые базы и
-> пользователей, случайно раскиданных между ними. Проверяйте `fly scale show`
-> после каждого изменения конфигурации.
+В [@BotFather](https://t.me/BotFather):
 
-Миграции и сид каталогов выполняются при каждом старте контейнера (обе
-операции идемпотентны), отдельная release-команда не нужна.
+1. `/newapp` → выберите бота → название, описание, иконка 640×360.
+2. **Web App URL**: `https://<project>.vercel.app`
+3. `/setmenubutton` → тот же URL → подпись кнопки (например, «Открыть журнал»).
 
-### 2. Фронтенд на Vercel
+Откройте бота и нажмите кнопку меню — приложение должно залогинить вас вашим
+Telegram-аккаунтом.
 
-Импортируйте репозиторий в Vercel и укажите **Root Directory: `frontend`** —
-остальное подхватится из `frontend/vercel.json`. Единственная переменная
-окружения:
+> В обычном браузере продакшен входить **не будет**, и это правильно:
+> `TELEGRAM_SKIP_AUTH_VALIDATION=false` включает проверку HMAC-подписи, а у
+> браузерного fallback подписи нет. Смотрите логи функции в Vercel, если вход
+> не проходит.
 
-```
-VITE_API_URL = https://<app>.fly.dev/api/v1
-```
+### Холодный старт
 
-Vite подставляет её на этапе сборки, поэтому после изменения переменной нужен
-повторный деплой, а не просто перезапуск.
-
-### 3. Свяжите бэкенд с доменом фронтенда
-
-```bash
-cd backend
-fly secrets set CORS_ORIGIN="https://<project>.vercel.app"
-```
-
-Несколько доменов перечисляются через запятую (например, прод и превью).
-Без этого шага браузер заблокирует запросы Mini App к API.
-
-### 4. Подключение к боту
-
-У вас уже есть бот и токен, поэтому остаётся привязать к нему Mini App —
-в [@BotFather](https://t.me/BotFather):
-
-1. `/newapp` → выберите бота → укажите название, описание, иконку 640×360.
-2. **Web App URL**: `https://<project>.vercel.app` — домен Vercel, не Fly.
-3. `/setmenubutton` → выберите бота → тот же URL → задайте подпись кнопки
-   (например, «Открыть журнал»), чтобы приложение открывалось из меню чата.
-
-Проверка: откройте бота в Telegram, нажмите кнопку меню. Приложение должно
-залогинить вас вашим Telegram-аккаунтом. Если вход не проходит, смотрите
-`fly logs` — при неверной подписи `initData` бэкенд отвечает 401 с причиной.
-
-> В обычном браузере продакшен-сборка входить **не будет**, и это правильно:
-> `TELEGRAM_SKIP_AUTH_VALIDATION=false` включает проверку HMAC-подписи, а
-> браузерный fallback подписи не имеет.
-
-### Переменные окружения
-
-| Переменная | Где | Назначение |
-|---|---|---|
-| `DATABASE_URL` | Fly (`fly.toml`) | `file:/data/lifestreak.db` — путь на томе |
-| `JWT_SECRET` | Fly secret | подпись токенов, ≥32 символов |
-| `TELEGRAM_BOT_TOKEN` | Fly secret | проверка подписи `initData` |
-| `TELEGRAM_SKIP_AUTH_VALIDATION` | Fly secret | всегда `false` в проде |
-| `CORS_ORIGIN` | Fly secret | домен(ы) фронтенда через запятую |
-| `VITE_API_URL` | Vercel | адрес API, вшивается при сборке |
-| `SEED_DEMO` | опционально | `true` — добавить демо-данные |
-
-### Резервная копия базы
-
-Том живёт отдельно от образа и переживает деплои, но не удаление тома:
-
-```bash
-fly ssh console -C "cp /data/lifestreak.db /data/backup.db"
-fly sftp get /data/backup.db ./lifestreak-backup.db
-```
-
-Если позже понадобится реплика или несколько регионов — переключение на Turso
-не требует изменений в коде: `PrismaService` уже работает через libSQL-адаптер,
-достаточно задать `DATABASE_URL=libsql://<db>-<org>.turso.io` и
-`TURSO_AUTH_TOKEN`.
+Функция засыпает при простое, первый запрос после паузы поднимает Nest заново
+(порядка 1–3 секунд), дальше ответы быстрые. Кэш Express-инстанса в
+`serverless.ts` не даёт пересобирать приложение на каждый запрос.
 
 ## Игровая механика (кратко)
 

@@ -6,6 +6,10 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
+    // Required for default-importing CommonJS packages (express in
+    // src/serverless.ts). Without it TS emits `express_1.default`, which is
+    // undefined at runtime.
+    "esModuleInterop": true,
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
