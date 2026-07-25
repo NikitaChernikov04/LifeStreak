@@ -8,7 +8,6 @@ Telegram Mini App, превращающая жизнь пользователя 
 
 ```
 LifeStreak/
-├── api/              # точка входа Vercel Function (реэкспорт из backend/dist)
 ├── backend/          # NestJS + SQLite (libSQL/Turso) + Prisma
 │   ├── prisma/
 │   │   ├── migrations/
@@ -29,7 +28,7 @@ LifeStreak/
 │       ├── hooks/        # React Query хуки по фичам
 │       ├── store/        # Zustand: auth, celebrations
 │       └── lib/          # api client, telegram sdk wrapper, utils
-├── vercel.json       # сборка и роутинг: /api/* → функция, остальное → SPA
+├── vercel.json       # два сервиса под одним доменом: /api/* → backend, остальное → frontend
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -86,29 +85,30 @@ npm run dev
 
 ## Деплой
 
-Фронтенд и API живут **в одном проекте Vercel**, база — в **Turso**
-(SQLite as a service). Ни один из сервисов не требует карты.
+Фронтенд и API живут **в одном проекте Vercel** (режим `services`), база — в
+**Turso** (SQLite as a service). Ни один из сервисов не требует карты.
 
-Так как фронт и API на одном домене, CORS не участвует вовсе, а
-`VITE_API_URL` — относительный путь `/api/v1` (задан в `vercel.json`).
+Боевой адрес: **https://lifestreak.vercel.app**
 
 ### Как это устроено
 
+`vercel.json` описывает два сервиса под одним доменом:
+
 ```
-api/index.ts            → Vercel Function: реэкспорт скомпилированного Nest
-backend/src/serverless.ts → тот же AppModule без listen(), с кэшем между вызовами
-frontend/dist           → статика, отдаётся с того же домена
+frontend  → root: frontend, Vite-статика
+backend   → root: backend,  entrypoint: dist/main.js
+rewrites  → /api/* уходит в backend, всё остальное в frontend
 ```
 
-NestJS собирается обычным `tsc` (`nest build`) **до** упаковки функции: Vercel
-собирает функции через esbuild, который не умеет `emitDecoratorMetadata`, и без
-предварительной сборки DI бы развалилась.
+Один домен на оба сервиса означает, что CORS не участвует вовсе, а фронтенд
+обращается к относительному `/api/v1` (см. `frontend/src/lib/api.ts`, где
+это же значение — дефолт для любой не-dev сборки).
 
 ### 1. База данных в Turso
 
 Создайте аккаунт на [turso.tech](https://turso.tech) (вход через GitHub) и
-базу. Понадобятся две вещи: **URL базы** (`libsql://<db>-<org>.turso.io`) и
-**auth token**.
+базу. Понадобятся **URL базы** (`libsql://<db>-<org>.turso.io`) и **auth
+token**.
 
 Примените схему и справочные данные — обе команды идемпотентны:
 
@@ -124,11 +124,13 @@ DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run prisma:seed
 
 ### 2. Проект на Vercel
 
-Импортируйте репозиторий на [vercel.com/new](https://vercel.com/new).
-**Root Directory оставьте корнем репозитория** — не `frontend`: сборка и
-функции описаны в корневом `vercel.json`.
+```bash
+npx vercel login
+npx vercel link --yes --project lifestreak
+npx vercel --prod
+```
 
-Переменные окружения (Settings → Environment Variables):
+Переменные окружения (Production):
 
 | Переменная | Значение |
 |---|---|
@@ -137,34 +139,36 @@ DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run prisma:seed
 | `JWT_SECRET` | случайная строка от 32 символов |
 | `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
 | `TELEGRAM_SKIP_AUTH_VALIDATION` | `false` |
+| `VITE_API_URL` | `/api/v1` |
 
 Проверка после деплоя:
 
 ```bash
-curl https://<project>.vercel.app/api/v1/health
+curl https://lifestreak.vercel.app/api/v1/health
 ```
+
+> **Prisma и кэш зависимостей.** Vercel восстанавливает `node_modules` из
+> кэша, не повторяя генерацию клиента, поэтому в `backend/package.json` есть
+> `postinstall: prisma generate`. Без него бэкенд падает на старте с
+> `PrismaClientInitializationError`.
 
 ### 3. Подключение к боту
 
 В [@BotFather](https://t.me/BotFather):
 
 1. `/newapp` → выберите бота → название, описание, иконка 640×360.
-2. **Web App URL**: `https://<project>.vercel.app`
+2. **Web App URL**: `https://lifestreak.vercel.app`
 3. `/setmenubutton` → тот же URL → подпись кнопки (например, «Открыть журнал»).
-
-Откройте бота и нажмите кнопку меню — приложение должно залогинить вас вашим
-Telegram-аккаунтом.
 
 > В обычном браузере продакшен входить **не будет**, и это правильно:
 > `TELEGRAM_SKIP_AUTH_VALIDATION=false` включает проверку HMAC-подписи, а у
-> браузерного fallback подписи нет. Смотрите логи функции в Vercel, если вход
-> не проходит.
+> браузерного fallback подписи нет. Вместо приложения показывается экран
+> «Вход не выполнен».
 
 ### Холодный старт
 
-Функция засыпает при простое, первый запрос после паузы поднимает Nest заново
-(порядка 1–3 секунд), дальше ответы быстрые. Кэш Express-инстанса в
-`serverless.ts` не даёт пересобирать приложение на каждый запрос.
+Бэкенд-сервис засыпает при простое; первый запрос поднимает Nest заново
+(порядка 1–2 секунд), дальше ответы быстрые.
 
 ## Игровая механика (кратко)
 
