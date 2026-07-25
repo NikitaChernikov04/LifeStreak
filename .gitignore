@@ -17,3 +17,10 @@ backend/prisma/*.db
 backend/prisma/*.db-journal
 
 *.tsbuildinfo
+
+.vercel
+.env*
+# Re-allow the committed examples: the `.env*` line above (added by the Vercel
+# CLI) would otherwise hide them from new clones.
+!.env.example
+!**/.env.example
