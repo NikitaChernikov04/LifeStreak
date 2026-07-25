@@ -47,7 +47,12 @@ for (const name of entries) {
     continue;
   }
 
-  const sql = await readFile(path.join(MIGRATIONS_DIR, name, 'migration.sql'), 'utf8');
+  // Strip a UTF-8 BOM: an editor (or PowerShell's `Out-File -Encoding utf8`)
+  // can leave one, and the server rejects the statement with a bare HTTP 400.
+  const sql = (await readFile(path.join(MIGRATIONS_DIR, name, 'migration.sql'), 'utf8')).replace(
+    /^﻿/,
+    '',
+  );
   await client.executeMultiple(sql);
   await client.execute({
     sql: 'INSERT INTO _schema_migrations (name, applied_at) VALUES (?, ?)',
