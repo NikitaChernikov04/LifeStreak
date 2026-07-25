@@ -1,0 +1,45 @@
+# Local "production-like" stack. The database is a SQLite file on a named
+# volume — the same shape the Fly deployment uses, so what you test here is
+# what runs there. No Postgres or Redis: the schema is SQLite (see
+# backend/prisma/schema.prisma) and nothing in the app reads a cache.
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: file:/data/lifestreak.db
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: 30d
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_SKIP_AUTH_VALIDATION: ${TELEGRAM_SKIP_AUTH_VALIDATION:-false}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      # Set to true to include the demo user and its sample streaks.
+      SEED_DEMO: ${SEED_DEMO:-false}
+    volumes:
+      - sqlite_data:/data
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/v1/health']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api/v1}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '5173:80'
+
+volumes:
+  sqlite_data:

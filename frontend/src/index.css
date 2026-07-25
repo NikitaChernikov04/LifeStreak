@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Paper — cool grey-green stock, not warm cream. Kept at 91% lightness so
+       ink has somewhere to sit and the grid stays legible. */
+    --paper: 70 12% 91%;
+    --paper-edge: 70 11% 87%;
+    --paper-sunk: 70 10% 84%;
+    --grid: 72 10% 72%;
+
+    /* Ink — the only voice with weight. */
+    --ink: 163 11% 12%;
+    --ink-soft: 163 8% 26%;
+    --graphite: 80 5% 44%;
+
+    /* Indigo is the active colour: it is what you write with. */
+    --indigo: 203 30% 26%;
+    --indigo-soft: 203 25% 42%;
+
+    /* Vermilion is the correcting pencil. Breaks and losses only — never decoration. */
+    --vermilion: 7 64% 47%;
+    --ochre: 38 59% 45%;
+
+    --grid-size: 22px;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    /* The page is ruled paper. Both rules are drawn from the same token so the
+       sheet never looks printed on top of a different surface. */
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        hsl(var(--grid) / 0.26) 0 1px,
+        transparent 1px var(--grid-size)
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        hsl(var(--grid) / 0.26) 0 1px,
+        transparent 1px var(--grid-size)
+      );
+    background-position: 0 0;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: hsl(var(--ochre) / 0.3);
+  }
+
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* One focus treatment everywhere: a drawn box, never a glow. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--indigo));
+    outline-offset: 2px;
+  }
+
+  input,
+  button,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  /* An entry in the notebook: hairline box, no shadow, no radius worth naming. */
+  .entry {
+    @apply border border-ink/15 bg-paper/70 backdrop-blur-[1px];
+  }
+
+  /* Section heading — the pre-printed field label on a form. */
+  .field-label {
+    @apply font-mono text-label font-medium uppercase text-graphite;
+  }
+
+  /* Numbers that are measurements, not prose. */
+  .figure {
+    @apply font-mono tabular-nums;
+  }
+
+  /* A ruled blank on a form: you write on the line, not in a box. */
+  .field-input {
+    @apply h-11 w-full rounded-none border-0 border-b border-ink/35 bg-transparent px-0 font-display text-lg tracking-wide outline-none transition-colors placeholder:font-sans placeholder:text-base placeholder:tracking-normal placeholder:text-graphite/70 focus:border-ink;
+  }
+
+  /* Dialogs animate as paper being laid down, not as a modal fading in. */
+  .dlg-overlay[data-state='open'] {
+    animation: fade-in 0.16s ease-out;
+  }
+  .dlg-overlay[data-state='closed'] {
+    animation: fade-in 0.14s ease-in reverse;
+  }
+  .dlg-content[data-state='open'] {
+    animation: sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .dlg-content[data-state='closed'] {
+    animation: sheet-in 0.16s ease-in reverse;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% + 10px));
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* The margin rule of a school exercise book. */
+  .margin-rule {
+    box-shadow: inset 1px 0 0 hsl(var(--vermilion) / 0.5);
+  }
+
+  .paper-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--paper-edge)) 25%,
+      hsl(var(--paper-sunk)) 37%,
+      hsl(var(--paper-edge)) 63%
+    );
+    background-size: 200% 100%;
+    animation: paper-shimmer 1.8s linear infinite;
+  }
+
+  @keyframes paper-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

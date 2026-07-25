@@ -1,0 +1,12 @@
+node_modules
+dist
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+# Never ship a local database into the image — /data on the volume is the
+# only database the deployed app should ever see.
+prisma/dev.db
+prisma/*.db
+prisma/*.db-journal
+npm-debug.log*

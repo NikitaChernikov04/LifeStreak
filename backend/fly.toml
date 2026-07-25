@@ -1,0 +1,44 @@
+# LifeStreak API on Fly.io.
+#
+# The database is a SQLite file on a Fly volume, so this app MUST stay at
+# exactly one machine — two machines cannot share a volume, and running two
+# with separate volumes would silently split your users across two databases.
+# Check with `fly scale show`; fix with `fly scale count 1`.
+#
+# Rename the app before the first deploy, or let `fly launch` do it for you.
+app = "lifestreak-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DATABASE_URL = "file:/data/lifestreak.db"
+  # Secrets (JWT_SECRET, TELEGRAM_BOT_TOKEN, CORS_ORIGIN) are set with
+  # `fly secrets set` — never commit them here.
+
+[[mounts]]
+  source = "lifestreak_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_start_machines = true
+  # Keep one machine warm: a cold start on the first tap of a Mini App is the
+  # worst possible first impression. Set to "stop"/0 to trade latency for cost.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/api/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
