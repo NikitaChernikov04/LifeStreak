@@ -9,12 +9,16 @@ Telegram Mini App, превращающая жизнь пользователя 
 ```
 LifeStreak/
 ├── backend/          # NestJS + SQLite (libSQL/Turso) + Prisma
+│   ├── api/          # index.js — точка входа Vercel (обычный JS, см. «Деплой»)
 │   ├── prisma/
 │   │   ├── migrations/
 │   │   ├── schema.prisma
 │   │   └── seed.ts
 │   ├── scripts/      # apply-schema.mjs — миграции для libsql://
 │   └── src/
+│       ├── main.ts       # обычный сервер: локально и в Docker
+│       ├── serverless.ts # обработчик для Vercel
+│       ├── app.setup.ts  # общая настройка Nest для обоих входов
 │       ├── modules/  # auth, users, streaks, hearts, challenges, achievements,
 │       │              # statistics, invites, notifications, health
 │       ├── common/    # guards, interceptors, filters, decorators, utils
@@ -28,7 +32,7 @@ LifeStreak/
 │       ├── hooks/        # React Query хуки по фичам
 │       ├── store/        # Zustand: auth, celebrations
 │       └── lib/          # api client, telegram sdk wrapper, utils
-├── vercel.json       # два сервиса под одним доменом: /api/* → backend, остальное → frontend
+├── vercel.json       # одна сборка на два таргета: /api/* → функция, остальное → статика
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -85,24 +89,46 @@ npm run dev
 
 ## Деплой
 
-Фронтенд и API живут **в одном проекте Vercel** (режим `services`), база — в
-**Turso** (SQLite as a service). Ни один из сервисов не требует карты.
+Фронтенд и API живут **в одном проекте Vercel**, база — в **Turso** (SQLite
+as a service). Ни один из сервисов не требует карты.
 
 Боевой адрес: **https://lifestreak.vercel.app**
 
 ### Как это устроено
 
-`vercel.json` описывает два сервиса под одним доменом:
+`vercel.json` описывает две сборки под одним доменом:
 
 ```
-frontend  → root: frontend, Vite-статика
-backend   → root: backend,  entrypoint: dist/main.js
-rewrites  → /api/* уходит в backend, всё остальное в frontend
+frontend/package.json  → @vercel/static-build, Vite-статика из dist/
+backend/api/index.js   → @vercel/node, serverless-функция
+routes                 → /api/* в функцию, статика по файлам, остальное в index.html
 ```
 
-Один домен на оба сервиса означает, что CORS не участвует вовсе, а фронтенд
-обращается к относительному `/api/v1` (см. `frontend/src/lib/api.ts`, где
-это же значение — дефолт для любой не-dev сборки).
+Один домен означает, что CORS не участвует вовсе, а фронтенд обращается к
+относительному `/api/v1` (см. `frontend/src/lib/api.ts`, где это же значение —
+дефолт для любой не-dev сборки).
+
+**Почему точка входа — обычный JavaScript.** `backend/api/index.js` не
+компилируется, а только реэкспортирует результат `nest build`:
+
+```js
+module.exports = require('../dist/serverless').default;
+```
+
+Vercel собирает файлы в `api/` сам, через esbuild, а тот не умеет
+`emitDecoratorMetadata` — без неё Nest не резолвит конструкторы, и DI падает.
+Поэтому TypeScript компилирует `tsc` (скрипт `vercel-build`), а шим только
+передаёт готовый обработчик.
+
+`src/serverless.ts` кэширует **промис** загрузки, а не приложение: на холодном
+старте несколько параллельных запросов ждут одну инициализацию вместо трёх.
+Общая настройка Nest вынесена в `src/app.setup.ts` — её делят обычный сервер
+(`main.ts`, локально и в Docker) и функция, чтобы расхождение между ними не
+всплыло только в проде.
+
+> Раньше проект жил на альфа-режиме `services`. Его пришлось убрать: формат
+> ломался при каждой смене версии Vercel CLI на билд-машине, а на CLI 58
+> перестал собирать бэкенд с рабочими зависимостями вообще.
 
 ### 1. База данных в Turso
 
@@ -154,11 +180,18 @@ curl https://lifestreak.vercel.app/api/v1/health
 > `postinstall: prisma generate`. Без него бэкенд падает на старте с
 > `PrismaClientInitializationError`.
 
-> **Миграции — вручную, до деплоя.** Режим `services` собирает сервис
-> скриптом `npm run build` (не `vercel-build`), автоматического хука для
-> миграций там нет. Меняли схему — сначала прогоните `npm run db:migrate`
-> по боевой базе, потом пушьте: иначе новый код придёт на старую схему.
-> Скрипт идемпотентен, лишний запуск ничего не сломает.
+> **Миграции — вручную, до деплоя.** Автоматического хука нет намеренно:
+> миграция по боевой базе не должна зависеть от того, дособрался ли билд.
+> Меняли схему — сначала `npm run db:migrate` по проду, потом пуш, иначе
+> новый код придёт на старую схему. Скрипт идемпотентен, лишний запуск
+> ничего не сломает.
+
+> **Проверять деплой до промоушена.** `npx vercel deploy --prod --skip-domain`
+> собирает с боевыми переменными, но не переключает домен; после проверки —
+> `npx vercel promote <url>`. Откат тем же `promote` на предыдущий деплой
+> занимает секунды. Учтите, что на непромоутнутом URL включена защита
+> деплоя: GET через `vercel curl` проходит, а POST она отбивает голым
+> `400 Bad Request` — это не приложение.
 
 ### 3. Подключение к боту
 
