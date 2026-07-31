@@ -7,6 +7,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { AchievementsPage } from '@/pages/AchievementsPage';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTelegramLogin } from '@/hooks/useAuth';
+import { useRedeemInviteFromLink } from '@/hooks/useInvites';
 import { getInitData } from '@/lib/telegram';
 
 export default function App() {
@@ -19,6 +20,9 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Only once there is a session: redeeming an invite is an authenticated call.
+  useRedeemInviteFromLink(Boolean(user));
 
   if (!user) {
     return (

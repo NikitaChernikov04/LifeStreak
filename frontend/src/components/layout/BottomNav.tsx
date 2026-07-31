@@ -22,7 +22,7 @@ export function BottomNav() {
             onClick={() => hapticImpact('light')}
             className={({ isActive }) =>
               cn(
-                '-mt-px flex flex-1 items-center justify-center border-t-2 py-3.5 font-display text-sm uppercase tracking-[0.12em] transition-colors',
+                'flex flex-1 items-center justify-center border-b-2 py-3.5 font-display text-sm uppercase tracking-[0.12em] transition-colors',
                 isActive ? 'border-ink text-ink' : 'border-transparent text-graphite',
               )
             }

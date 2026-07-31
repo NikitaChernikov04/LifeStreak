@@ -4,37 +4,37 @@ import { Button } from '@/components/ui/button';
 import { InkHeart } from '@/components/hearts/HeartsDisplay';
 
 /**
- * The daily challenge is a slip pasted into the journal — the one boxed element
- * on the page, set on a slightly different paper stock so it reads as inserted
- * rather than written. Its legend is cut into the rule, like a form fieldset.
+ * The daily challenge is a slip pasted into the journal — the one dashed-edge
+ * element on the page, so it reads as inserted rather than written. Its reward
+ * is set in ochre, the colour of everything the user earns.
  */
 export function DailyChallengeCard() {
   const { data: challenge, isLoading } = useTodayChallenge();
   const complete = useCompleteChallenge();
 
   if (isLoading || !challenge) {
-    return <div className="h-28 paper-shimmer" />;
+    return <div className="h-32 paper-shimmer" />;
   }
 
   const isDone = challenge.status === 'COMPLETED';
   const paysHeart = challenge.template.rewardType === 'HEART';
 
   return (
-    <motion.section layout className="relative border border-ink/30 bg-paper-edge px-4 pb-4 pt-5">
-      <span className="absolute -top-[7px] left-3 bg-paper-edge px-1.5 font-mono text-micro font-medium uppercase text-ink">
-        Задание дня
-      </span>
-      <span className="absolute -top-[7px] right-3 flex items-center gap-1 bg-paper-edge px-1.5 font-mono text-micro uppercase text-graphite">
-        {paysHeart ? (
-          <>
-            <InkHeart filled className="h-3 w-3 text-ochre" /> сердце
-          </>
-        ) : (
-          `+${challenge.template.xpReward} XP`
-        )}
-      </span>
+    <motion.section layout className="border border-dashed border-ink/45 bg-paper-edge/60 p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="field-label text-ink">Задание дня</span>
+        <span className="flex shrink-0 items-center gap-1 font-mono text-micro uppercase text-ochre">
+          {paysHeart ? (
+            <>
+              <InkHeart filled className="h-3 w-3" /> сердце
+            </>
+          ) : (
+            `+${challenge.template.xpReward} XP`
+          )}
+        </span>
+      </div>
 
-      <div className="flex items-start gap-3">
+      <div className="mt-3 flex items-start gap-3">
         <span className="text-xl leading-none">{challenge.template.icon}</span>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-lg uppercase leading-tight tracking-[0.04em]">
@@ -46,15 +46,15 @@ export function DailyChallengeCard() {
         </div>
       </div>
 
-      <div className="mt-3.5">
+      <div className="mt-4">
         {isDone ? (
-          <p className="flex h-11 items-center justify-center border border-dashed border-ink/30 font-display text-[0.9375rem] uppercase tracking-[0.14em] text-graphite">
+          <p className="flex h-11 items-center justify-center border border-dashed border-ochre/50 font-display text-[0.9375rem] uppercase tracking-[0.14em] text-ochre">
             Выполнено
           </p>
         ) : (
           <Button
             className="w-full"
-            variant="outline"
+            variant="reward"
             disabled={complete.isPending}
             onClick={() => complete.mutate(challenge.id)}
           >

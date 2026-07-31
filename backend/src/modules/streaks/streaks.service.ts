@@ -45,7 +45,18 @@ export class StreaksService {
     return streak;
   }
 
+  /**
+   * People arrive with history: 100 days without a cigarette, tracked
+   * somewhere else. `startingCount` carries that history in, dated as finished
+   * through yesterday — so today is still an open day the user records here,
+   * which is the only habit the app is actually trying to build.
+   *
+   * Carried-over days do not pay XP, hearts or achievements: those are earned
+   * in the journal, not declared on the way in.
+   */
   async create(userId: string, dto: CreateStreakDto) {
+    const imported = dto.startingCount ?? 0;
+
     const streak = await this.prisma.streak.create({
       data: {
         userId,
@@ -53,7 +64,11 @@ export class StreaksService {
         icon: dto.icon,
         color: dto.color,
         templateKey: dto.templateKey,
-        nextGoal: 7,
+        currentCount: imported,
+        longestCount: imported,
+        importedCount: imported,
+        lastCheckinAt: imported > 0 ? new Date(todayUtc().getTime() - DAY_MS) : null,
+        nextGoal: nextGoalFor(imported),
       },
     });
 
@@ -61,6 +76,17 @@ export class StreaksService {
       where: { userId },
       data: { activeStreaksCount: { increment: 1 } },
     });
+
+    if (imported > 0) {
+      const stats = await this.prisma.statistics.findUniqueOrThrow({ where: { userId } });
+      if (imported > stats.longestStreakEver) {
+        await this.prisma.statistics.update({
+          where: { userId },
+          data: { longestStreakEver: imported },
+        });
+      }
+    }
+
     await this.achievementsService.checkCollector(userId);
 
     return streak;

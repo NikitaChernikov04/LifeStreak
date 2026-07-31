@@ -13,5 +13,10 @@ export default () => ({
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     // Allow bypassing initData HMAC verification in local dev without a real bot token.
     skipAuthValidation: process.env.TELEGRAM_SKIP_AUTH_VALIDATION === 'true',
+    // Both optional: invite links need the bot's @username, which is looked up
+    // via getMe when it is not configured. The short name is the one given to
+    // /newapp in BotFather — set it when the bot has no "main" Mini App.
+    botUsername: process.env.TELEGRAM_BOT_USERNAME ?? '',
+    miniAppShortName: process.env.TELEGRAM_MINIAPP_SHORT_NAME ?? '',
   },
 });

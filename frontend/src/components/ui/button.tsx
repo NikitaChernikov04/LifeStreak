@@ -15,12 +15,15 @@ const buttonVariants = cva(
         default: 'border-ink bg-ink text-paper hover:bg-ink-soft',
         outline: 'border-ink/40 bg-transparent text-ink hover:border-ink hover:bg-ink/[0.04]',
         quiet: 'border-transparent bg-transparent text-graphite hover:text-ink',
+        // Ochre marks what is earned — the daily challenge is the only reward
+        // you can claim by pressing something, so it is the only ochre button.
+        reward: 'border-ochre bg-ochre/[0.07] text-ochre hover:bg-ochre/[0.14]',
         // Vermilion means a break in the record — recovery is the only button that wears it.
         danger: 'border-vermilion bg-vermilion/[0.06] text-vermilion hover:bg-vermilion/[0.12]',
       },
       size: {
         default: 'h-11 px-5 text-[0.9375rem]',
-        sm: 'h-8 px-3 text-xs tracking-[0.12em]',
+        sm: 'h-9 px-3 text-xs tracking-[0.12em]',
         lg: 'h-12 px-6 text-base',
         icon: 'h-9 w-9 px-0',
       },

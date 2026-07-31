@@ -7,8 +7,9 @@ export function initTelegramApp() {
   WebApp.ready();
   WebApp.expand();
   // Paper, so the Telegram chrome reads as the edge of the same sheet.
-  WebApp.setHeaderColor('#EAEBE5');
-  WebApp.setBackgroundColor('#EAEBE5');
+  // Keep in sync with --paper in index.css.
+  WebApp.setHeaderColor('#F4F1E7');
+  WebApp.setBackgroundColor('#F4F1E7');
   WebApp.disableVerticalSwipes?.();
 }
 
@@ -26,6 +27,17 @@ export function getInitData(): string {
   return `user=${encodeURIComponent(JSON.stringify(devUser))}&auth_date=${Math.floor(
     Date.now() / 1000,
   )}&hash=dev`;
+}
+
+/**
+ * The invite code, when the app was opened from a `?startapp=<code>` link.
+ * Outside Telegram the same parameter is read from the query string so the
+ * flow can be exercised in a browser.
+ */
+export function getStartParam(): string | null {
+  if (isInTelegram) return WebApp.initDataUnsafe?.start_param ?? null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('startapp') ?? params.get('tgWebAppStartParam');
 }
 
 export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'medium') {

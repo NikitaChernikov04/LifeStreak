@@ -60,6 +60,7 @@ export class HeartsService {
       WEEK_STREAK_BONUS: 'За серию в 7 дней',
       STEPS_GOAL: 'За 15 000 шагов',
       INVITE_FRIEND: 'За приглашение друга',
+      JOINED_BY_INVITE: 'За вход по приглашению друга',
       HELPED_FRIEND_RECOVER: 'За помощь другу',
       STREAK_RECOVERY_SPENT: 'Потрачено на восстановление серии',
       ACHIEVEMENT_BONUS: 'За достижение',

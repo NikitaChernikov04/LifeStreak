@@ -69,6 +69,10 @@ model Streak {
 
   currentCount   Int      @default(0)
   longestCount   Int      @default(0)
+  // Days the user had already accumulated elsewhere before joining. Counted in
+  // currentCount, but kept separately so the record can show them as carried
+  // over rather than observed here.
+  importedCount  Int      @default(0)
   nextGoal       Int      @default(7) // next milestone shown on the card
 
   status         String   @default("ACTIVE")

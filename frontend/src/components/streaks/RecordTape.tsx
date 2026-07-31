@@ -2,26 +2,32 @@ import { cn } from '@/lib/utils';
 
 /**
  * The signature element: one streak rendered as a strip of the notebook's
- * record — one cell per day, four weeks wide.
+ * record — one square cell per day, two weeks wide.
  *
  * Every mark encodes a real rule of the game rather than decorating it:
- *  · a full-height tick is a day that earned a heart (every 7th day)
- *  · a short tick is an ordinary recorded day
- *  · a dotted cell is today, still unwritten — the caret blinks there
- *  · a vermilion bar is a missed day, the only place that colour appears
- *  · faint dots are days before the streak began, when nothing was observed
+ *  · a filled cell is a recorded day
+ *  · an ochre cell is a day that paid out a heart (every 7th)
+ *  · a hollow cell is a day carried over from before the journal
+ *  · a dashed cell is today, still unwritten — the caret blinks there
+ *  · a vermilion cell is a missed day, the only place that colour appears
+ *  · a hairline outline is a day before the streak began
  */
 
-const WINDOW = 28; // four weeks — 7 is the unit the game actually pays out on
+const WINDOW = 14; // two weeks — wide enough to always show a heart day
 
-type CellKind = 'blank' | 'day' | 'heartday' | 'today' | 'gap';
+type CellKind = 'blank' | 'day' | 'heartday' | 'imported' | 'today' | 'gap';
 
 interface Cell {
   kind: CellKind;
   dayInStreak?: number;
 }
 
-export function buildTape(count: number, doneToday: boolean, hasGap: boolean): Cell[] {
+export function buildTape(
+  count: number,
+  doneToday: boolean,
+  hasGap: boolean,
+  importedCount = 0,
+): Cell[] {
   // Today always sits in the last position; the record is built backwards from it.
   const todayIndex = WINDOW - 1;
   const lastRecorded = doneToday ? todayIndex : hasGap ? todayIndex - 2 : todayIndex - 1;
@@ -32,7 +38,14 @@ export function buildTape(count: number, doneToday: boolean, hasGap: boolean): C
     const dayInStreak = count - (lastRecorded - i);
     if (dayInStreak < 1) break;
     cells[i] = {
-      kind: dayInStreak % 7 === 0 ? 'heartday' : 'day',
+      // Carried-over days were never observed here, so they are drawn hollow —
+      // the heart payout only applies to days actually recorded in the app.
+      kind:
+        dayInStreak <= importedCount
+          ? 'imported'
+          : dayInStreak % 7 === 0
+            ? 'heartday'
+            : 'day',
       dayInStreak,
     };
   }
@@ -47,23 +60,35 @@ interface RecordTapeProps {
   count: number;
   doneToday: boolean;
   hasGap?: boolean;
+  /** Days carried over from before the user joined — drawn hollow. */
+  importedCount?: number;
   /** Larger scale for the exported share image. */
   large?: boolean;
   className?: string;
 }
 
-export function RecordTape({ count, doneToday, hasGap = false, large, className }: RecordTapeProps) {
-  const cells = buildTape(count, doneToday, hasGap);
+const CELL: Record<CellKind, string> = {
+  day: 'bg-ink border-ink',
+  heartday: 'bg-ochre border-ochre',
+  imported: 'bg-transparent border-ink/55',
+  gap: 'bg-vermilion border-vermilion',
+  today: 'animate-caret border-dashed border-indigo bg-indigo/15',
+  blank: 'bg-transparent border-ink/15',
+};
+
+export function RecordTape({
+  count,
+  doneToday,
+  hasGap = false,
+  importedCount = 0,
+  large,
+  className,
+}: RecordTapeProps) {
+  const cells = buildTape(count, doneToday, hasGap, importedCount);
   const overflows = count > (doneToday ? WINDOW : WINDOW - 1);
 
-  // Ordinary days sit low, heart days rise to full height: the strip reads as a
-  // ruled scale where the tall marks are the payouts, not as a solid bar.
-  const h = large
-    ? { base: 'h-16', tick: 'h-6', heart: 'h-16', blank: 'h-1.5' }
-    : { base: 'h-8', tick: 'h-3', heart: 'h-8', blank: 'h-[3px]' };
-
   return (
-    <div className={cn('flex items-end gap-[3px]', h.base, className)} aria-hidden>
+    <div className={cn('flex w-full items-center gap-[3px]', className)} aria-hidden>
       {overflows && (
         <span
           className={cn(
@@ -76,49 +101,17 @@ export function RecordTape({ count, doneToday, hasGap = false, large, className 
       )}
       {cells.map((cell, i) => {
         const isNewest = cell.dayInStreak === count && doneToday;
-        const key = isNewest ? `newest-${count}` : `${i}-${cell.kind}`;
-
-        if (cell.kind === 'heartday') {
-          return (
-            <span
-              key={key}
-              className={cn(
-                'min-w-0 flex-1 bg-ink',
-                h.heart,
-                isNewest && 'origin-bottom animate-stamp',
-              )}
-            />
-          );
-        }
-        if (cell.kind === 'day') {
-          return (
-            <span
-              key={key}
-              className={cn(
-                'min-w-0 flex-1 bg-ink',
-                h.tick,
-                isNewest && 'origin-bottom animate-stamp',
-              )}
-            />
-          );
-        }
-        if (cell.kind === 'gap') {
-          return <span key={key} className={cn('min-w-0 flex-1 bg-vermilion', h.heart)} />;
-        }
-        if (cell.kind === 'today') {
-          // The blank waiting to be written in — full height so it reads as the
-          // next thing to do, not as a gap in the data.
-          return (
-            <span
-              key={key}
-              className={cn(
-                'min-w-0 flex-1 animate-caret border border-dashed border-indigo bg-indigo/15',
-                h.heart,
-              )}
-            />
-          );
-        }
-        return <span key={key} className={cn('min-w-0 flex-1 bg-grid', h.blank)} />;
+        return (
+          <span
+            key={isNewest ? `newest-${count}` : `${i}-${cell.kind}`}
+            className={cn(
+              'aspect-square min-w-0 flex-1 border',
+              large ? 'max-w-[24px]' : 'max-w-[16px]',
+              CELL[cell.kind],
+              isNewest && 'origin-bottom animate-stamp',
+            )}
+          />
+        );
       })}
     </div>
   );

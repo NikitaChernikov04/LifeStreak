@@ -25,6 +25,8 @@ export interface CreateStreakInput {
   icon: string;
   color: string;
   templateKey?: string;
+  /** Days already accumulated elsewhere, counted as finished through yesterday. */
+  startingCount?: number;
 }
 
 export function useCreateStreak() {

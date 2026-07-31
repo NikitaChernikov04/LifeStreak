@@ -29,14 +29,14 @@ export function AchievementsPage() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(i * 0.03, 0.24) }}
-              className="relative flex items-baseline gap-3 border-b border-ink/15 py-4"
+              className="flex items-start gap-3 border-b border-ink/15 py-4"
             >
-              {/* Margin: the award's own mark once earned, a blank rule until then. */}
+              {/* The award's own mark once earned, a ruled blank until then. */}
               <span
                 aria-hidden
                 className={cn(
-                  'absolute -left-12 top-4 flex h-6 w-10 items-center justify-center text-base',
-                  !unlocked && 'text-graphite/40',
+                  'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border text-base',
+                  unlocked ? 'border-ochre/60 bg-ochre/10' : 'border-ink/15 text-graphite/40',
                 )}
               >
                 {unlocked ? achievement.icon : '—'}
@@ -58,7 +58,7 @@ export function AchievementsPage() {
 
               <span
                 className={cn(
-                  'figure shrink-0 text-micro uppercase',
+                  'figure mt-1 shrink-0 text-micro uppercase',
                   unlocked ? 'text-ochre' : 'text-graphite/50',
                 )}
               >

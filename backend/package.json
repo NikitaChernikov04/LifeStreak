@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "nest build",
-    "vercel-build": "prisma generate && nest build",
+    "vercel-build": "prisma generate && node scripts/apply-schema.mjs && nest build",
     "postinstall": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",

@@ -4,25 +4,28 @@
 
 @layer base {
   :root {
-    /* Paper — cool grey-green stock, not warm cream. Kept at 91% lightness so
-       ink has somewhere to sit and the grid stays legible. */
-    --paper: 70 12% 91%;
-    --paper-edge: 70 11% 87%;
-    --paper-sunk: 70 10% 84%;
-    --grid: 72 10% 72%;
+    /* Paper — warm cream stock, the colour of aged squared-paper notebooks.
+       Held at 93% lightness so ink has somewhere to sit and the grid stays
+       legible without turning the page grey. */
+    --paper: 46 38% 93%;
+    --paper-edge: 45 33% 90%;
+    --paper-sunk: 44 28% 85%;
+    --grid: 42 20% 74%;
 
-    /* Ink — the only voice with weight. */
-    --ink: 163 11% 12%;
-    --ink-soft: 163 8% 26%;
-    --graphite: 80 5% 44%;
+    /* Ink — the only voice with weight. Warm black, not neutral: on cream a
+       neutral black reads blue. */
+    --ink: 30 14% 13%;
+    --ink-soft: 30 10% 27%;
+    --graphite: 38 9% 45%;
 
     /* Indigo is the active colour: it is what you write with. */
-    --indigo: 203 30% 26%;
-    --indigo-soft: 203 25% 42%;
+    --indigo: 205 28% 28%;
+    --indigo-soft: 205 24% 44%;
 
     /* Vermilion is the correcting pencil. Breaks and losses only — never decoration. */
-    --vermilion: 7 64% 47%;
-    --ochre: 38 59% 45%;
+    --vermilion: 9 58% 47%;
+    /* Ochre marks everything earned: hearts, rewards, milestone days. */
+    --ochre: 33 48% 44%;
 
     --grid-size: 22px;
   }
@@ -76,11 +79,6 @@
 }
 
 @layer components {
-  /* An entry in the notebook: hairline box, no shadow, no radius worth naming. */
-  .entry {
-    @apply border border-ink/15 bg-paper/70 backdrop-blur-[1px];
-  }
-
   /* Section heading — the pre-printed field label on a form. */
   .field-label {
     @apply font-mono text-label font-medium uppercase text-graphite;
@@ -91,9 +89,14 @@
     @apply font-mono tabular-nums;
   }
 
-  /* A ruled blank on a form: you write on the line, not in a box. */
+  /* A ruled blank on a form — a boxed field, the way a paper form prints it. */
   .field-input {
-    @apply h-11 w-full rounded-none border-0 border-b border-ink/35 bg-transparent px-0 font-display text-lg tracking-wide outline-none transition-colors placeholder:font-sans placeholder:text-base placeholder:tracking-normal placeholder:text-graphite/70 focus:border-ink;
+    @apply h-11 w-full rounded-none border border-ink/30 bg-paper/60 px-3 font-display text-lg tracking-wide outline-none transition-colors placeholder:font-sans placeholder:text-base placeholder:tracking-normal placeholder:text-graphite/70 focus:border-ink;
+  }
+
+  /* A stamped-on status, not a button: bordered, small caps, never filled. */
+  .chip {
+    @apply inline-flex items-center gap-1 whitespace-nowrap border border-ink/30 px-2 py-1 font-mono text-micro uppercase text-graphite;
   }
 
   /* Dialogs animate as paper being laid down, not as a modal fading in. */
@@ -138,11 +141,6 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
-  }
-
-  /* The margin rule of a school exercise book. */
-  .margin-rule {
-    box-shadow: inset 1px 0 0 hsl(var(--vermilion) / 0.5);
   }
 
   .paper-shimmer {

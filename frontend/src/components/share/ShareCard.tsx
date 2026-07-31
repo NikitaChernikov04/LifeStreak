@@ -9,11 +9,11 @@ interface ShareCardProps {
 
 // Exported as an image, so every colour is written out literally rather than
 // left to a custom property the serialiser would have to resolve.
-const PAPER = '#EAEBE5';
-const PAPER_EDGE = '#E0E2DA';
-const INK = '#1B2220';
-const GRID = '#BCBFB0';
-const GRAPHITE = '#72766B';
+const PAPER = '#F4F1E7';
+const PAPER_EDGE = '#EEEADD';
+const INK = '#26211D';
+const GRID = '#CAC2AF';
+const GRAPHITE = '#7D7569';
 
 /** A clipping torn from the journal: same paper, same rules, no app chrome. */
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(({ streak }, ref) => {

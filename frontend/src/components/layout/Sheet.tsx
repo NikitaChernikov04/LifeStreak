@@ -2,14 +2,13 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Every screen is a sheet of the notebook: a ruled left margin with room for
- * marginalia, and the body of the page to the right of it. Children that want
- * to write in the margin position themselves at `-left-11`.
+ * Every screen is a sheet of the notebook. The page runs edge to edge with a
+ * single modest margin: on a 320px phone a ruled gutter costs a sixth of the
+ * measure, and the entries themselves already read as a ruled page.
  */
 export function Sheet({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('relative mx-auto min-h-full w-full max-w-md pb-32 pl-12 pr-4 pt-5', className)}>
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-12 w-px bg-vermilion/40" />
+    <div className={cn('relative mx-auto min-h-full w-full max-w-md px-4 pb-28 pt-5', className)}>
       {children}
     </div>
   );

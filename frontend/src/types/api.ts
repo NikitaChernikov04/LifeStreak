@@ -9,6 +9,8 @@ export interface Streak {
   templateKey: string | null;
   currentCount: number;
   longestCount: number;
+  /** Days carried over from a tracker the user kept before joining. */
+  importedCount: number;
   nextGoal: number;
   status: StreakStatus;
   lastCheckinAt: string | null;
@@ -129,6 +131,10 @@ export interface Invite {
   inviteeId: string | null;
   status: 'PENDING' | 'ACCEPTED';
   createdAt: string;
+  /** t.me link that opens the Mini App with the code in start_param. */
+  link: string | null;
+  acceptedCount: number;
+  hasAcceptedInvite: boolean;
 }
 
 export interface ApiEnvelope<T> {

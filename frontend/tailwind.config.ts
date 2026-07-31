@@ -1,10 +1,10 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * "Журнал наблюдений" — the app is a lab notebook you keep on yourself.
- * Paper is deliberately cool and grey (not the warm cream that reads as
- * generic "editorial"); ink is the only voice that carries weight; vermilion
- * is reserved exclusively for breaks in the record, never for decoration.
+ * "Журнал наблюдений" — the app is a squared-paper notebook you keep on
+ * yourself. Paper is warm cream and ruled; ink is the only voice that carries
+ * weight; ochre marks everything the user has earned; vermilion is reserved
+ * exclusively for breaks in the record, never for decoration.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
