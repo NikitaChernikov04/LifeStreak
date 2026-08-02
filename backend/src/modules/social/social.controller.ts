@@ -3,13 +3,21 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { SocialService } from './social.service';
 import { FeedService } from './feed.service';
-import { ReactDto, SearchUsersDto, SetSharingDto, UpdatePrivacyDto } from './dto/social.dto';
+import { GoalsService } from './goals.service';
+import {
+  CreateGoalDto,
+  ReactDto,
+  SearchUsersDto,
+  SetSharingDto,
+  UpdatePrivacyDto,
+} from './dto/social.dto';
 
 @Controller({ path: 'social', version: '1' })
 export class SocialController {
   constructor(
     private readonly social: SocialService,
     private readonly feed: FeedService,
+    private readonly goals: GoalsService,
   ) {}
 
   // ── privacy ─────────────────────────────────────────────────
@@ -43,6 +51,11 @@ export class SocialController {
   @Get('friends')
   friends(@CurrentUser('id') userId: string) {
     return this.social.listFriends(userId);
+  }
+
+  @Get('leaderboard')
+  leaderboard(@CurrentUser('id') userId: string) {
+    return this.social.leaderboard(userId);
   }
 
   @Get('requests')
@@ -92,6 +105,39 @@ export class SocialController {
   @Delete('checkins/:id/reaction')
   unreact(@CurrentUser('id') userId: string, @Param('id') checkinId: string) {
     return this.feed.unreact(userId, checkinId);
+  }
+
+  // ── group goals ─────────────────────────────────────────────
+
+  @Get('goals')
+  listGoals(@CurrentUser('id') userId: string) {
+    return this.goals.listMine(userId);
+  }
+
+  @Post('goals')
+  createGoal(@CurrentUser('id') userId: string, @Body() dto: CreateGoalDto) {
+    return this.goals.create(userId, dto);
+  }
+
+  @Post('goals/:id/join')
+  joinGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.join(userId, goalId);
+  }
+
+  /** Declines an invitation, leaves a goal, or — for the owner — ends it. */
+  @Delete('goals/:id')
+  leaveGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.leave(userId, goalId);
+  }
+
+  @Post('goals/:id/checkin')
+  checkinGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.checkin(userId, goalId);
+  }
+
+  @Post('goals/:id/rescue')
+  rescueGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.rescue(userId, goalId);
   }
 
   @Get('users/:id')

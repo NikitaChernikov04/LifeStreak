@@ -1,5 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsOptional, IsString, Length } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsHexColor,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 import { REACTION_KEYS, ReactionKey } from '../../../common/enums';
 
 export class UpdatePrivacyDto {
@@ -25,4 +37,30 @@ export class SetSharingDto {
   @IsBoolean()
   @Type(() => Boolean)
   isShared: boolean;
+}
+
+export class CreateGoalDto {
+  @IsString()
+  @Length(1, 40)
+  title: string;
+
+  @IsString()
+  @Length(1, 8)
+  icon: string;
+
+  @IsHexColor()
+  color: string;
+
+  /** A week is the shortest span that means anything; a year is the longest
+   *  a group can realistically promise each other. */
+  @IsInt()
+  @Min(3)
+  @Max(365)
+  targetDays: number;
+
+  /** Friends invited to hold it. The creator is joined automatically. */
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  memberIds: string[];
 }

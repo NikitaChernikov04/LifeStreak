@@ -270,7 +270,72 @@ export class SocialService {
       }),
     ]);
 
-    return { ...state, canView, streaks, statistics, friends };
+    return {
+      ...state,
+      canView,
+      streaks,
+      friends,
+      statistics: statistics && {
+        ...statistics,
+        // The stored count includes hidden streaks, and printing it would let
+        // a friend subtract and learn how many are being kept from them —
+        // the same inference the profile deliberately does not offer.
+        activeStreaksCount: isSelf ? statistics.activeStreaksCount : streaks.length,
+      },
+    };
+  }
+
+  /**
+   * Ranks the user against their friends by the longest streak each of them
+   * is currently holding. The number counts every active streak, shared or
+   * not — competing on it is what the user asked for, and a bare figure says
+   * how long, never what. Titles stay behind the per-streak flag.
+   *
+   * Ties share a rank and the next one skips, the way a scoreboard reads:
+   * two firsts are followed by a third, not a second.
+   */
+  async leaderboard(userId: string) {
+    const ids = [userId, ...(await this.friendIds(userId))];
+
+    const [people, best, stats] = await Promise.all([
+      this.prisma.user.findMany({ where: { id: { in: ids } }, select: USER_CARD }),
+      this.prisma.streak.groupBy({
+        by: ['userId'],
+        where: { userId: { in: ids }, status: 'ACTIVE' },
+        _max: { currentCount: true },
+      }),
+      this.prisma.statistics.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, totalCheckins: true },
+      }),
+    ]);
+
+    const bestBy = new Map(best.map((row) => [row.userId, row._max.currentCount ?? 0]));
+    const checkinsBy = new Map(stats.map((row) => [row.userId, row.totalCheckins]));
+
+    const rows = people
+      .map((person) => ({
+        ...person,
+        isMe: person.id === userId,
+        bestStreak: bestBy.get(person.id) ?? 0,
+        totalCheckins: checkinsBy.get(person.id) ?? 0,
+      }))
+      .sort(
+        (a, b) =>
+          b.bestStreak - a.bestStreak ||
+          b.totalCheckins - a.totalCheckins ||
+          a.firstName.localeCompare(b.firstName, 'ru'),
+      );
+
+    let rank = 0;
+    let previous: number | null = null;
+    return rows.map((row, index) => {
+      if (row.bestStreak !== previous) {
+        rank = index + 1;
+        previous = row.bestStreak;
+      }
+      return { ...row, rank };
+    });
   }
 
   /** True when the two are friends — the only relation that grants reading. */

@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { hapticImpact, hapticNotification } from '@/lib/telegram';
+import { useCelebrationStore } from '@/store/useCelebrationStore';
 import type {
   FeedEntry,
   FriendRequest,
   FriendState,
+  GroupGoal,
+  LeaderboardRow,
   Paginated,
   PersonCard,
   PrivacySettings,
@@ -41,6 +44,13 @@ export function useOutgoingRequests() {
   return useQuery({
     queryKey: [...SOCIAL, 'requests', 'outgoing'],
     queryFn: () => api.get<unknown, PersonCard[]>('/social/requests/outgoing'),
+  });
+}
+
+export function useLeaderboard() {
+  return useQuery({
+    queryKey: [...SOCIAL, 'leaderboard'],
+    queryFn: () => api.get<unknown, LeaderboardRow[]>('/social/leaderboard'),
   });
 }
 
@@ -143,6 +153,112 @@ export function useSetStreakSharing() {
       if (context?.previous) queryClient.setQueryData(key, context.previous);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: SOCIAL }),
+  });
+}
+
+// ── group goals ───────────────────────────────────────────────
+
+export function useGoals() {
+  return useQuery({
+    queryKey: [...SOCIAL, 'goals'],
+    queryFn: () => api.get<unknown, GroupGoal[]>('/social/goals'),
+  });
+}
+
+export interface CreateGoalInput {
+  title: string;
+  icon: string;
+  color: string;
+  targetDays: number;
+  memberIds: string[];
+}
+
+export function useCreateGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateGoalInput) => api.post<unknown, GroupGoal>('/social/goals', input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SOCIAL }),
+  });
+}
+
+export function useJoinGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: string) => api.post<unknown, GroupGoal>(`/social/goals/${goalId}/join`),
+    onSuccess: () => {
+      hapticNotification('success');
+      queryClient.invalidateQueries({ queryKey: SOCIAL });
+    },
+  });
+}
+
+/** Declines an invitation, leaves a goal, or — for the owner — ends it. */
+export function useLeaveGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: string) => api.delete<unknown, { ok: boolean }>(`/social/goals/${goalId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SOCIAL }),
+  });
+}
+
+/** Days worth a stamp. Anything else would make the theatre routine. */
+const GOAL_MILESTONES = [7, 14, 30, 50, 100, 180, 365];
+
+/**
+ * Marking a group goal celebrates only when the day actually closed for the
+ * whole group — the count moving is the group's achievement, not the tap's —
+ * and then only at a milestone or the finish. A stamp every single day would
+ * stop meaning anything by the third one.
+ */
+export function useCheckinGoal() {
+  const queryClient = useQueryClient();
+  const pushCelebration = useCelebrationStore((s) => s.push);
+
+  return useMutation({
+    mutationFn: (goal: GroupGoal) =>
+      api
+        .post<unknown, GroupGoal>(`/social/goals/${goal.id}/checkin`)
+        .then((updated) => ({ updated, before: goal })),
+    onSuccess: ({ updated, before }) => {
+      hapticNotification('success');
+      queryClient.invalidateQueries({ queryKey: SOCIAL });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+
+      const dayClosed = updated.currentCount > before.currentCount;
+      if (!dayClosed) return;
+
+      if (updated.status === 'COMPLETED') {
+        pushCelebration({
+          type: 'milestone',
+          days: updated.currentCount,
+          icon: updated.icon,
+          title: updated.title,
+          note: 'Цель взята. Держались все',
+        });
+        pushCelebration({ type: 'heart', amount: 1 });
+      } else if (GOAL_MILESTONES.includes(updated.currentCount)) {
+        pushCelebration({
+          type: 'milestone',
+          days: updated.currentCount,
+          icon: updated.icon,
+          title: updated.title,
+          note: 'Вместе, без пропусков',
+        });
+      }
+    },
+  });
+}
+
+export function useRescueGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: string) => api.post<unknown, GroupGoal>(`/social/goals/${goalId}/rescue`),
+    onSuccess: () => {
+      hapticNotification('success');
+      queryClient.invalidateQueries({ queryKey: SOCIAL });
+      queryClient.invalidateQueries({ queryKey: ['hearts'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
   });
 }
 

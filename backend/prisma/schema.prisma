@@ -53,9 +53,12 @@ model User {
   invitesSent Invite[] @relation("Inviter")
   invitesUsed Invite[] @relation("Invitee")
 
-  friendshipsSent     Friendship[] @relation("Requester")
-  friendshipsReceived Friendship[] @relation("Addressee")
+  friendshipsSent     Friendship[]       @relation("Requester")
+  friendshipsReceived Friendship[]       @relation("Addressee")
   reactions           Reaction[]
+  goalsOwned          GroupGoal[]        @relation("GoalOwner")
+  goalMemberships     GroupGoalMember[]
+  goalCheckins        GroupGoalCheckin[]
 
   @@index([telegramId])
   @@map("users")
@@ -292,6 +295,89 @@ model Friendship {
   @@index([addresseeId, status])
   @@index([requesterId, status])
   @@map("friendships")
+}
+
+// ──────────────────────────────────────────────────────────────
+// GROUP GOALS
+// ──────────────────────────────────────────────────────────────
+// A goal several friends hold together. The day counts for the group only
+// once every joined member has marked it, so `currentCount` is a property of
+// the group, not a sum of anyone's effort.
+//
+// State is derived from `lastCountedDate` rather than tracked by a scheduler:
+// with no cron in production, a goal that "should have broken" overnight must
+// still read as broken the next time anyone opens it. The service compares
+// that date with today on every read and persists the reset it finds.
+//
+// status: "ACTIVE" | "COMPLETED" | "ABANDONED" — see GroupGoalStatus.
+
+model GroupGoal {
+  id String @id @default(cuid())
+
+  title String
+  icon  String
+  color String
+
+  targetDays   Int // the finish line: reaching it completes the goal
+  currentCount Int @default(0)
+
+  status          String    @default("ACTIVE")
+  // Last UTC date credited to the whole group. Null until the first full day.
+  lastCountedDate DateTime?
+
+  ownerId String
+  owner   User   @relation("GoalOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  members  GroupGoalMember[]
+  checkins GroupGoalCheckin[]
+
+  @@index([ownerId, status])
+  @@map("group_goals")
+}
+
+// status: "INVITED" | "JOINED" — an invitation is not participation, and a
+// goal never waits on somebody who has not agreed to hold it.
+
+model GroupGoalMember {
+  id String @id @default(cuid())
+
+  goalId String
+  goal   GroupGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status   String    @default("INVITED")
+  joinedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([goalId, userId])
+  @@index([userId, status])
+  @@map("group_goal_members")
+}
+
+model GroupGoalCheckin {
+  id String @id @default(cuid())
+
+  goalId String
+  goal   GroupGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date      DateTime // UTC midnight of the day it counts for
+  usedHeart Boolean  @default(false) // closed a missed day rather than today
+
+  createdAt DateTime @default(now())
+
+  @@unique([goalId, userId, date])
+  @@index([goalId, date])
+  @@map("group_goal_checkins")
 }
 
 // ──────────────────────────────────────────────────────────────

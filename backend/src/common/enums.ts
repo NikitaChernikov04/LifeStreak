@@ -34,6 +34,8 @@ export const HEART_REASONS = [
   'JOINED_BY_INVITE',
   'HELPED_FRIEND_RECOVER',
   'STREAK_RECOVERY_SPENT',
+  'GROUP_GOAL_RESCUE_SPENT',
+  'GROUP_GOAL_COMPLETED',
   'ACHIEVEMENT_BONUS',
 ] as const;
 export type HeartReason = (typeof HEART_REASONS)[number];
@@ -43,6 +45,13 @@ export type InviteStatus = (typeof INVITE_STATUSES)[number];
 
 export const FRIENDSHIP_STATUSES = ['PENDING', 'ACCEPTED'] as const;
 export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
+
+export const GROUP_GOAL_STATUSES = ['ACTIVE', 'COMPLETED', 'ABANDONED'] as const;
+export type GroupGoalStatus = (typeof GROUP_GOAL_STATUSES)[number];
+
+/** An invitation is not participation — a goal never waits on an INVITED member. */
+export const GROUP_MEMBER_STATUSES = ['INVITED', 'JOINED'] as const;
+export type GroupMemberStatus = (typeof GROUP_MEMBER_STATUSES)[number];
 
 /** Stored as keys, not emoji: the glyph is a rendering decision. */
 export const REACTION_KEYS = ['LIKE', 'FIRE', 'CLAP', 'STRONG', 'HEART'] as const;
@@ -59,5 +68,10 @@ export const NOTIFICATION_TYPES = [
   'FRIEND_REQUEST',
   'FRIEND_ACCEPTED',
   'REACTION_RECEIVED',
+  'GROUP_GOAL_INVITE',
+  'GROUP_GOAL_JOINED',
+  'GROUP_GOAL_DAY',
+  'GROUP_GOAL_BROKEN',
+  'GROUP_GOAL_COMPLETED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

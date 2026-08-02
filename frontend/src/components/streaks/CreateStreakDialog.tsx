@@ -3,12 +3,10 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Button } from '@/components/ui/button';
 import { useCreateStreak, useStreakTemplates } from '@/hooks/useStreaks';
 import { cn } from '@/lib/utils';
+import { COLORS, ICONS } from '@/lib/palette';
+import { pluralizeDays } from '@/lib/streak';
 import type { StreakTemplate } from '@/types/api';
 
-// Pigments rather than screen neon: saturated web colours fight the paper and
-// would out-shout the ink everywhere a streak tile appears.
-const COLORS = ['#B8862F', '#96543F', '#2F4858', '#4A6FA5', '#3E6B5A', '#6B4C7A', '#3F7A78', '#7A7D3C', '#8C5B7B'];
-const ICONS = ['📚', '🏃', '💻', '🇬🇧', '🚭', '🍔', '🧘', '🚶', '🎸', '🎨', '💰', '☕'];
 const MAX_STARTING_COUNT = 3650;
 
 /** Creating a streak is filling in a blank form: labelled fields, ruled input, no chrome. */
@@ -189,13 +187,4 @@ export function CreateStreakDialog() {
       </DialogContent>
     </Dialog>
   );
-}
-
-function pluralizeDays(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'дней';
-  if (mod10 === 1) return 'день';
-  if (mod10 >= 2 && mod10 <= 4) return 'дня';
-  return 'дней';
 }

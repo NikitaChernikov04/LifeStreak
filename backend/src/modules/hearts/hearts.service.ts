@@ -63,6 +63,8 @@ export class HeartsService {
       JOINED_BY_INVITE: 'За вход по приглашению друга',
       HELPED_FRIEND_RECOVER: 'За помощь другу',
       STREAK_RECOVERY_SPENT: 'Потрачено на восстановление серии',
+      GROUP_GOAL_RESCUE_SPENT: 'Потрачено, чтобы спасти общую цель',
+      GROUP_GOAL_COMPLETED: 'За доведённую до конца общую цель',
       ACHIEVEMENT_BONUS: 'За достижение',
     };
     return labels[reason];

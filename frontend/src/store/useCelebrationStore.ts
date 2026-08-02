@@ -5,7 +5,7 @@ export type CelebrationEvent =
   | { type: 'levelup'; level: number }
   | { type: 'achievement'; achievement: AchievementDefinition }
   | { type: 'heart'; amount: number }
-  | { type: 'milestone'; days: number; icon: string; title: string };
+  | { type: 'milestone'; days: number; icon: string; title: string; note?: string };
 
 interface CelebrationState {
   queue: CelebrationEvent[];

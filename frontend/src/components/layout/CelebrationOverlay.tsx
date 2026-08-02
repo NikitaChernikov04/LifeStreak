@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { useCelebrationStore } from '@/store/useCelebrationStore';
 import { hapticNotification } from '@/lib/telegram';
+import { pluralizeDays } from '@/lib/streak';
 import { InkHeart } from '@/components/hearts/HeartsDisplay';
 
 type CelebrationEvent = NonNullable<ReturnType<typeof useCelebrationStore.getState>['queue'][0]>;
@@ -67,8 +68,8 @@ function StampBody({ event }: { event: CelebrationEvent }) {
     return (
       <Stamp
         caption={event.title}
-        headline={`${event.days} дней подряд`}
-        note="Ты уже такой человек"
+        headline={`${event.days} ${pluralizeDays(event.days)} подряд`}
+        note={event.note ?? 'Ты уже такой человек'}
       />
     );
   }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FeedEntry } from '@/components/social/FeedEntry';
 import { PersonRow } from '@/components/social/PersonRow';
+import { Leaderboard } from '@/components/social/Leaderboard';
 import {
   useFeed,
   useFriendRequests,
@@ -16,7 +17,7 @@ import { displayName, initials, requestsLine } from '@/lib/social';
 import type { PersonCard } from '@/types/api';
 import { cn } from '@/lib/utils';
 
-type Tab = 'feed' | 'people';
+type Tab = 'feed' | 'board' | 'people';
 
 export function FriendsPage() {
   const [tab, setTab] = useState<Tab>('feed');
@@ -27,11 +28,13 @@ export function FriendsPage() {
     <Sheet>
       <SheetTitle meta={pending > 0 ? requestsLine(pending) : undefined}>Друзья</SheetTitle>
 
-      {/* Two segments of one ruled control — not pills. */}
+      {/* Three segments of one ruled control — not pills. Labels are kept to
+          one short word: at 320px each segment gets under a hundred pixels. */}
       <div className="mt-4 flex border border-ink/30">
         {(
           [
             ['feed', 'Лента'],
+            ['board', 'Рейтинг'],
             ['people', 'Люди'],
           ] as const
         ).map(([value, label]) => (
@@ -40,7 +43,7 @@ export function FriendsPage() {
             type="button"
             onClick={() => setTab(value)}
             className={cn(
-              'relative flex-1 py-2.5 font-display text-sm uppercase tracking-[0.12em] transition-colors',
+              'relative min-w-0 flex-1 py-2.5 font-display text-[0.8125rem] uppercase tracking-[0.08em] transition-colors',
               tab === value ? 'bg-ink text-paper' : 'text-graphite hover:text-ink',
             )}
           >
@@ -48,7 +51,7 @@ export function FriendsPage() {
             {value === 'people' && pending > 0 && (
               <span
                 className={cn(
-                  'figure ml-1.5 text-micro',
+                  'figure ml-1 text-micro',
                   tab === value ? 'text-paper/80' : 'text-vermilion',
                 )}
               >
@@ -59,7 +62,9 @@ export function FriendsPage() {
         ))}
       </div>
 
-      {tab === 'feed' ? <FeedTab onFindPeople={() => setTab('people')} /> : <PeopleTab />}
+      {tab === 'feed' && <FeedTab onFindPeople={() => setTab('people')} />}
+      {tab === 'board' && <Leaderboard />}
+      {tab === 'people' && <PeopleTab />}
     </Sheet>
   );
 }

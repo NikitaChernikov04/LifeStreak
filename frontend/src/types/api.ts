@@ -218,6 +218,55 @@ export interface FeedEntry extends ReactionSummary {
   };
 }
 
+export interface LeaderboardRow {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  level: number;
+  isMe: boolean;
+  /** Longest streak this person is currently holding. */
+  bestStreak: number;
+  totalCheckins: number;
+  rank: number;
+}
+
+export type GroupGoalStatus = 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
+export type GroupMemberStatus = 'INVITED' | 'JOINED';
+
+export interface GoalMember {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  level: number;
+  isMe: boolean;
+  markedToday: boolean;
+}
+
+export interface GroupGoal {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  targetDays: number;
+  currentCount: number;
+  status: GroupGoalStatus;
+  ownerId: string;
+  isOwner: boolean;
+  completedAt: string | null;
+  myStatus: GroupMemberStatus | null;
+  markedToday: boolean;
+  /** Yesterday is missing and a heart can still buy it back. */
+  atRisk: boolean;
+  canRescue: boolean;
+  waitingOn: { id: string; firstName: string; isMe: boolean }[];
+  members: GoalMember[];
+  invited: Omit<GoalMember, 'isMe' | 'markedToday'>[];
+}
+
 export interface Paginated<T> {
   items: T[];
   meta: { total: number; page: number; limit: number; totalPages: number };
