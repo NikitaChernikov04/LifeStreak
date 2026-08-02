@@ -137,6 +137,95 @@ export interface Invite {
   hasAcceptedInvite: boolean;
 }
 
+// ── social ────────────────────────────────────────────────────
+
+export type FollowState = 'SELF' | 'NONE' | 'PENDING' | 'ACCEPTED';
+export type ProfileVisibility = 'PRIVATE' | 'OPEN';
+export type ReactionKey = 'LIKE' | 'FIRE' | 'CLAP' | 'STRONG' | 'HEART';
+
+/** A person as they appear in search, lists and the feed. */
+export interface PersonCard {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  level: number;
+  followState: FollowState;
+  followsMe?: boolean;
+}
+
+export interface FollowRequest {
+  id: string;
+  createdAt: string;
+  user: Omit<PersonCard, 'followState'>;
+}
+
+export interface PrivacySettings {
+  profileVisibility: ProfileVisibility;
+  isDiscoverable: boolean;
+  followers: number;
+  following: number;
+  pendingRequests: number;
+  streaks: { id: string; title: string; icon: string; isShared: boolean; currentCount: number }[];
+}
+
+/** A streak as a follower sees it — no goals, no freezes, no internals. */
+export interface SharedStreak {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  currentCount: number;
+  longestCount: number;
+  importedCount: number;
+  status: StreakStatus;
+  lastCheckinAt: string | null;
+}
+
+export interface PublicProfile extends PersonCard {
+  xp: number;
+  createdAt: string;
+  canView: boolean;
+  followers: number;
+  following: number;
+  streaks: SharedStreak[];
+  statistics: {
+    totalXp: number;
+    totalCheckins: number;
+    activeStreaksCount: number;
+    longestStreakEver: number;
+  } | null;
+}
+
+export interface ReactionSummary {
+  reactions: { key: ReactionKey; count: number }[];
+  reactionCount: number;
+  myReaction: ReactionKey | null;
+  reactedBy: { id: string; firstName: string; username: string | null }[];
+}
+
+export interface FeedEntry extends ReactionSummary {
+  id: string;
+  date: string;
+  createdAt: string;
+  usedHeart: boolean;
+  user: Omit<PersonCard, 'followState'>;
+  streak: {
+    id: string;
+    title: string;
+    icon: string;
+    color: string;
+    currentCount: number;
+    importedCount: number;
+  };
+}
+
+export interface Paginated<T> {
+  items: T[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
 export interface ApiEnvelope<T> {
   success: true;
   data: T;

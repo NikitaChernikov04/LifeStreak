@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { Streak } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { isCheckedInToday, isRecoverable } from '@/lib/streak';
+import { isCheckedInToday, isRecoverable, pluralizeDays } from '@/lib/streak';
 import { useArchiveStreak, useCheckinStreak, useRecoverStreak } from '@/hooks/useStreaks';
 import { RecordTape, daysToNextHeart } from './RecordTape';
 
@@ -141,13 +141,4 @@ export function StreakCard({ streak, onShare }: StreakCardProps) {
       </div>
     </motion.article>
   );
-}
-
-function pluralizeDays(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'дней';
-  if (mod10 === 1) return 'день';
-  if (mod10 >= 2 && mod10 <= 4) return 'дня';
-  return 'дней';
 }

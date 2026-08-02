@@ -17,6 +17,7 @@ import { AchievementsModule } from './modules/achievements/achievements.module';
 import { StatisticsModule } from './modules/statistics/statistics.module';
 import { InvitesModule } from './modules/invites/invites.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SocialModule } from './modules/social/social.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     StatisticsModule,
     InvitesModule,
     NotificationsModule,
+    SocialModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

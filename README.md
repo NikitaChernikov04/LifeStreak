@@ -20,15 +20,15 @@ LifeStreak/
 │       ├── serverless.ts # обработчик для Vercel
 │       ├── app.setup.ts  # общая настройка Nest для обоих входов
 │       ├── modules/  # auth, users, streaks, hearts, challenges, achievements,
-│       │              # statistics, invites, notifications, health
+│       │              # statistics, invites, social, notifications, health
 │       ├── common/    # guards, interceptors, filters, decorators, utils
 │       ├── config/
 │       └── prisma/
 ├── frontend/         # React + TypeScript + Vite + Tailwind + shadcn/ui
 │   └── src/
 │       ├── components/  # ui, layout, streaks, hearts, challenges,
-│       │                 # achievements, profile, share
-│       ├── pages/        # Home, Achievements, Profile
+│       │                 # achievements, profile, social, share
+│       ├── pages/        # Home, Friends, UserProfile, Achievements, Profile
 │       ├── hooks/        # React Query хуки по фичам
 │       ├── store/        # Zustand: auth, celebrations
 │       └── lib/          # api client, telegram sdk wrapper, utils
@@ -86,6 +86,28 @@ npm run dev
 
 Откройте http://localhost:5173 — приложение работает и в обычном браузере
 (эмулируя Telegram initData), и как полноценный Telegram Mini App.
+
+Всё, что касается двух людей — подписки, заявки, реакции, — проверяется
+двумя вкладками: `?devUser=Аня` и `?devUser=Боря` дают разные учётки с
+устойчивыми id. Параметр читается только в браузерном fallback, который
+работает лишь при `TELEGRAM_SKIP_AUTH_VALIDATION=true`.
+
+## Социальный слой
+
+Подписки **односторонние**: то, что ты читаешь кого-то, ничего не говорит об
+обратном. Согласие устроено в два уровня, и оба закрыты по умолчанию:
+
+1. **Профиль.** `profileVisibility=PRIVATE` (по умолчанию) держит каждую
+   заявку до подтверждения владельцем; `OPEN` принимает сразу. Отдельный
+   флаг `isDiscoverable` решает, находится ли человек поиском.
+2. **Серия.** Подтверждённая заявка открывает профиль, но не привычки:
+   каждая серия имеет свой `isShared`, по умолчанию выключенный. В ленту и
+   в чужой профиль попадают только отмеченные серии.
+
+Оба условия перечитываются на каждом запросе, а не записываются в отметку:
+отписка или снятый флаг убирают из ленты и уже сделанные записи. Реакция
+(одна на человека на отметку, переключается) требует того же доступа, что и
+чтение, — на скрытую отметку сервер отвечает 403.
 
 ## Деплой
 

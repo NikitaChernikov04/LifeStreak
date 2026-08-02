@@ -20,33 +20,46 @@ datasource db {
 // ──────────────────────────────────────────────────────────────
 
 model User {
-  id         String   @id @default(cuid())
-  telegramId String   @unique // Telegram user id, stored as string (safe across SQLite/libSQL drivers)
-  username   String?
-  firstName  String
-  lastName   String?
-  avatarUrl  String?
+  id           String  @id @default(cuid())
+  telegramId   String  @unique // Telegram user id, stored as string (safe across SQLite/libSQL drivers)
+  username     String?
+  firstName    String
+  lastName     String?
+  avatarUrl    String?
   languageCode String?
 
-  level      Int      @default(1)
-  xp         Int      @default(0)
-  hearts     Int      @default(3) // starting hearts, max 5
-  maxHearts  Int      @default(5)
+  level     Int @default(1)
+  xp        Int @default(0)
+  hearts    Int @default(3) // starting hearts, max 5
+  maxHearts Int @default(5)
+
+  // Who may follow without asking. "PRIVATE" holds every new follower in
+  // PENDING until approved; "OPEN" accepts them on the spot. Default is
+  // PRIVATE because a journal of habits is not public by nature — see
+  // ProfileVisibility in common/enums.ts.
+  profileVisibility String  @default("PRIVATE")
+  // Whether the account turns up in search at all. Independent of the above:
+  // an OPEN profile can still choose not to be findable by handle.
+  isDiscoverable    Boolean @default(true)
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   lastSeenAt DateTime @default(now())
 
-  streaks        Streak[]
-  checkins       DailyCheckin[]
-  achievements   UserAchievement[]
-  heartLedger    HeartTransaction[]
+  streaks         Streak[]
+  checkins        DailyCheckin[]
+  achievements    UserAchievement[]
+  heartLedger     HeartTransaction[]
   dailyChallenges DailyChallenge[]
-  notifications  Notification[]
-  statistics     Statistics?
+  notifications   Notification[]
+  statistics      Statistics?
 
-  invitesSent    Invite[] @relation("Inviter")
-  invitesUsed    Invite[] @relation("Invitee")
+  invitesSent Invite[] @relation("Inviter")
+  invitesUsed Invite[] @relation("Invitee")
+
+  following Follow[]   @relation("Follower") // rows where this user is the one watching
+  followers Follow[]   @relation("Following") // rows where this user is the one watched
+  reactions Reaction[]
 
   @@index([telegramId])
   @@map("users")
@@ -58,31 +71,36 @@ model User {
 // status: "ACTIVE" | "BROKEN" | "ARCHIVED" — see StreakStatus in common/enums.ts
 
 model Streak {
-  id         String       @id @default(cuid())
-  userId     String
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title      String
-  icon       String // emoji
-  color      String // hex, for card theming
+  title       String
+  icon        String // emoji
+  color       String // hex, for card theming
   templateKey String? // e.g. "reading", "sport", "coding" — null if custom
 
-  currentCount   Int      @default(0)
-  longestCount   Int      @default(0)
+  currentCount  Int @default(0)
+  longestCount  Int @default(0)
   // Days the user had already accumulated elsewhere before joining. Counted in
   // currentCount, but kept separately so the record can show them as carried
   // over rather than observed here.
-  importedCount  Int      @default(0)
-  nextGoal       Int      @default(7) // next milestone shown on the card
+  importedCount Int @default(0)
+  nextGoal      Int @default(7) // next milestone shown on the card
 
-  status         String   @default("ACTIVE")
-  lastCheckinAt  DateTime?
-  freezesUsedTotal Int    @default(0)
+  status           String    @default("ACTIVE")
+  lastCheckinAt    DateTime?
+  freezesUsedTotal Int       @default(0)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  // Per-streak consent. Approving a follower opens the profile, not every
+  // habit in it: "не курю" and "спорт" do not deserve the same audience.
+  // Off by default — a streak becomes visible only when its owner says so.
+  isShared Boolean @default(false)
 
-  checkins   DailyCheckin[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checkins DailyCheckin[]
 
   @@index([userId, status])
   @@map("streaks")
@@ -93,18 +111,20 @@ model Streak {
 // ──────────────────────────────────────────────────────────────
 
 model DailyCheckin {
-  id         String   @id @default(cuid())
-  streakId   String
-  streak     Streak   @relation(fields: [streakId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  streakId String
+  streak   Streak @relation(fields: [streakId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Calendar date (UTC midnight) the checkin counts for — one per streak per day.
-  date       DateTime
-  usedHeart  Boolean  @default(false) // true if this checkin recovered a missed day
-  xpEarned   Int      @default(20)
+  date      DateTime
+  usedHeart Boolean  @default(false) // true if this checkin recovered a missed day
+  xpEarned  Int      @default(20)
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  reactions Reaction[]
 
   @@unique([streakId, date])
   @@index([userId, date])
@@ -117,13 +137,13 @@ model DailyCheckin {
 // rewardType: "XP" | "HEART" — see ChallengeReward in common/enums.ts
 
 model ChallengeTemplate {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  icon         String
-  xpReward     Int      @default(40)
-  rewardType   String   @default("XP")
-  isActive     Boolean  @default(true)
+  id          String  @id @default(cuid())
+  title       String
+  description String
+  icon        String
+  xpReward    Int     @default(40)
+  rewardType  String  @default("XP")
+  isActive    Boolean @default(true)
 
   dailyChallenges DailyChallenge[]
 
@@ -133,17 +153,17 @@ model ChallengeTemplate {
 // status: "PENDING" | "COMPLETED" | "EXPIRED" — see DailyChallengeStatus in common/enums.ts
 
 model DailyChallenge {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  templateId   String
-  template     ChallengeTemplate @relation(fields: [templateId], references: [id])
+  id         String            @id @default(cuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId String
+  template   ChallengeTemplate @relation(fields: [templateId], references: [id])
 
-  date         DateTime
-  status       String   @default("PENDING")
-  completedAt  DateTime?
+  date        DateTime
+  status      String    @default("PENDING")
+  completedAt DateTime?
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([userId, date])
   @@index([userId, status])
@@ -156,26 +176,26 @@ model DailyChallenge {
 // key: see AchievementKey in common/enums.ts
 
 model AchievementDefinition {
-  id          String   @id @default(cuid())
-  key         String   @unique
+  id          String @id @default(cuid())
+  key         String @unique
   title       String
   description String
   icon        String
-  xpReward    Int      @default(100)
+  xpReward    Int    @default(100)
 
-  unlocks     UserAchievement[]
+  unlocks UserAchievement[]
 
   @@map("achievement_definitions")
 }
 
 model UserAchievement {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  definitionId  String
-  definition    AchievementDefinition @relation(fields: [definitionId], references: [id])
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   AchievementDefinition @relation(fields: [definitionId], references: [id])
 
-  unlockedAt    DateTime @default(now())
+  unlockedAt DateTime @default(now())
 
   @@unique([userId, definitionId])
   @@map("user_achievements")
@@ -187,13 +207,13 @@ model UserAchievement {
 // reason: see HeartReason in common/enums.ts
 
 model HeartTransaction {
-  id        String      @id @default(cuid())
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   amount    Int // positive = earned, negative = spent
   reason    String
-  createdAt DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@map("heart_transactions")
@@ -204,17 +224,17 @@ model HeartTransaction {
 // ──────────────────────────────────────────────────────────────
 
 model Statistics {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  totalXp             Int      @default(0)
-  totalCheckins       Int      @default(0)
-  activeStreaksCount  Int      @default(0)
-  longestStreakEver   Int      @default(0)
-  perfectDaysCount     Int     @default(0) // days where every active streak was checked in
+  totalXp            Int @default(0)
+  totalCheckins      Int @default(0)
+  activeStreaksCount Int @default(0)
+  longestStreakEver  Int @default(0)
+  perfectDaysCount   Int @default(0) // days where every active streak was checked in
 
-  updatedAt           DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("statistics")
 }
@@ -225,21 +245,72 @@ model Statistics {
 // status: "PENDING" | "ACCEPTED" — see InviteStatus in common/enums.ts
 
 model Invite {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id   String @id @default(cuid())
+  code String @unique
 
-  inviterId   String
-  inviter     User     @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviterId String
+  inviter   User   @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
 
-  inviteeId   String?
-  invitee     User?    @relation("Invitee", fields: [inviteeId], references: [id], onDelete: SetNull)
+  inviteeId String?
+  invitee   User?   @relation("Invitee", fields: [inviteeId], references: [id], onDelete: SetNull)
 
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  acceptedAt  DateTime?
+  status     String    @default("PENDING")
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
 
   @@index([inviterId])
   @@map("invites")
+}
+
+// ──────────────────────────────────────────────────────────────
+// SOCIAL GRAPH
+// ──────────────────────────────────────────────────────────────
+// One-way subscriptions: following someone says nothing about them following
+// back. status: "PENDING" | "ACCEPTED" — see FollowStatus in common/enums.ts.
+// A row exists from the moment the request is made; declining deletes it,
+// so a declined request can be retried later rather than being sealed shut.
+
+model Follow {
+  id String @id @default(cuid())
+
+  followerId String
+  follower   User   @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+
+  followingId String
+  following   User   @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@unique([followerId, followingId])
+  @@index([followingId, status])
+  @@index([followerId, status])
+  @@map("follows")
+}
+
+// ──────────────────────────────────────────────────────────────
+// REACTIONS
+// ──────────────────────────────────────────────────────────────
+// key: see ReactionKey in common/enums.ts. One reaction per person per
+// checkin: reacting again switches it rather than stacking, which keeps the
+// counter under a checkin readable at a glance.
+
+model Reaction {
+  id String @id @default(cuid())
+
+  checkinId String
+  checkin   DailyCheckin @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([checkinId, userId])
+  @@index([checkinId])
+  @@map("reactions")
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -248,15 +319,15 @@ model Invite {
 // type: see NotificationType in common/enums.ts
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type      String
-  title     String
-  body      String
-  payload   String? // JSON-encoded — SQLite has no native Json type, serialized manually
-  isRead    Boolean  @default(false)
+  type    String
+  title   String
+  body    String
+  payload String? // JSON-encoded — SQLite has no native Json type, serialized manually
+  isRead  Boolean @default(false)
 
   createdAt DateTime @default(now())
 

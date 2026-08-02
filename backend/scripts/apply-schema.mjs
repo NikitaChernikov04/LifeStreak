@@ -22,7 +22,18 @@ if (!url) {
   process.exit(1);
 }
 
-const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+// Mirrors src/prisma/resolve-database-url.ts: a relative `file:` URL means
+// "relative to prisma/", the way the Prisma CLI reads it. Resolving it against
+// the current directory instead would quietly create a second SQLite file and
+// migrate that one, leaving the database the app actually opens untouched.
+function resolveUrl(raw) {
+  if (!raw.startsWith('file:')) return raw;
+  const filePath = raw.slice('file:'.length);
+  if (path.isAbsolute(filePath)) return raw;
+  return `file:${path.resolve(MIGRATIONS_DIR, '..', filePath)}`;
+}
+
+const client = createClient({ url: resolveUrl(url), authToken: process.env.TURSO_AUTH_TOKEN });
 
 await client.execute(`
   CREATE TABLE IF NOT EXISTS _schema_migrations (

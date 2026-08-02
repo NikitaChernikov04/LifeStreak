@@ -4,6 +4,11 @@ import { TelegramInitDataUser } from '../auth/telegram-verify.util';
 import { applyXpGain, XpApplyResult } from '../../common/utils/leveling.util';
 import { UpdateUserDto } from './dto/update-user.dto';
 
+/** Prisma's P2002 — the row already exists on a unique field. */
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002';
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -26,17 +31,29 @@ export class UsersService {
       });
     }
 
-    return this.prisma.user.create({
-      data: {
-        telegramId,
-        username: tgUser.username,
-        firstName: tgUser.first_name,
-        lastName: tgUser.last_name,
-        avatarUrl: tgUser.photo_url,
-        languageCode: tgUser.language_code,
-        statistics: { create: {} },
-      },
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          telegramId,
+          username: tgUser.username,
+          firstName: tgUser.first_name,
+          lastName: tgUser.last_name,
+          avatarUrl: tgUser.photo_url,
+          languageCode: tgUser.language_code,
+          statistics: { create: {} },
+        },
+      });
+    } catch (error) {
+      // Two first-time logins can land at once — the app opens with one, and a
+      // reconnect or a double tap sends another before the first has written a
+      // row. Both pass the findUnique above and the second loses the race on
+      // telegramId. That is the account being created, not an error worth
+      // showing a brand-new user, so read back the row the winner just wrote.
+      if (isUniqueViolation(error)) {
+        return this.prisma.user.findUniqueOrThrow({ where: { telegramId } });
+      }
+      throw error;
+    }
   }
 
   async getProfile(userId: string) {

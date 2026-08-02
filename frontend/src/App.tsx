@@ -5,6 +5,8 @@ import { CelebrationOverlay } from '@/components/layout/CelebrationOverlay';
 import { HomePage } from '@/pages/HomePage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { AchievementsPage } from '@/pages/AchievementsPage';
+import { FriendsPage } from '@/pages/FriendsPage';
+import { UserProfilePage } from '@/pages/UserProfilePage';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTelegramLogin } from '@/hooks/useAuth';
 import { useRedeemInviteFromLink } from '@/hooks/useInvites';
@@ -45,6 +47,8 @@ export default function App() {
     <>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/u/:userId" element={<UserProfilePage />} />
         <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Routes>

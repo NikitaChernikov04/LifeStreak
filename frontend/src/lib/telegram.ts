@@ -16,17 +16,39 @@ export function initTelegramApp() {
 export function getInitData(): string {
   if (isInTelegram) return WebApp.initData;
   // Local browser dev fallback — mirrors the shape Telegram sends, consumed
-  // only when the backend has TELEGRAM_SKIP_AUTH_VALIDATION=true.
-  const devUser = {
-    id: 999000001,
-    first_name: 'Демо',
-    last_name: 'Пользователь',
-    username: 'lifestreak_demo',
-    language_code: 'ru',
-  };
+  // only when the backend has TELEGRAM_SKIP_AUTH_VALIDATION=true, which
+  // production does not set.
+  //
+  // `?devUser=<name>` picks a different identity, so anything involving two
+  // people — following, requests, reactions — can be walked through in two
+  // browser tabs instead of two phones.
+  const params = new URLSearchParams(window.location.search);
+  const alias = params.get('devUser');
+  const devUser = alias
+    ? {
+        id: 999000000 + (hashCode(alias) % 900000),
+        first_name: alias,
+        username: `dev_${alias.toLowerCase()}`,
+        language_code: 'ru',
+      }
+    : {
+        id: 999000001,
+        first_name: 'Демо',
+        last_name: 'Пользователь',
+        username: 'lifestreak_demo',
+        language_code: 'ru',
+      };
+
   return `user=${encodeURIComponent(JSON.stringify(devUser))}&auth_date=${Math.floor(
     Date.now() / 1000,
   )}&hash=dev`;
+}
+
+/** Stable per-alias id, so reloading keeps the same dev account. */
+function hashCode(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(hash);
 }
 
 /**
