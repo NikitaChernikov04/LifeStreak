@@ -201,7 +201,8 @@ curl https://lifestreak.vercel.app/api/v1/health
 2. **Web App URL**: `https://lifestreak.vercel.app`
 3. Короткое имя (short name), которое спросит `/newapp`, положите в
    `TELEGRAM_MINIAPP_SHORT_NAME` — из него собираются ссылки-приглашения
-   `https://t.me/<bot>/<short-name>?startapp=<code>`.
+   `https://t.me/<bot>/<short-name>?startapp=<code>`. В проде это
+   `Life_Streakbot` и `start`, то есть `https://t.me/Life_Streakbot/start`.
 4. `/setmenubutton` → тот же URL → подпись кнопки (например, «Открыть журнал»).
 
 > В обычном браузере продакшен входить **не будет**, и это правильно:
