@@ -81,5 +81,17 @@ export function shareToTelegram(text: string, url?: string) {
   }
 }
 
+/**
+ * Opens a t.me link. Inside Telegram this hands off to the client, which keeps
+ * the Mini App alive behind the chat instead of leaving it in a browser tab.
+ */
+export function openTelegramLink(url: string) {
+  if (isInTelegram) {
+    WebApp.openTelegramLink(url);
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
 export { isInTelegram };
 export default WebApp;

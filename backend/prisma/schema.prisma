@@ -38,6 +38,13 @@ model User {
   // before that conversation starts.
   isDiscoverable Boolean @default(true)
 
+  // The user's own switch for messages from the bot. `botBlocked` is not a
+  // setting but an observation: Telegram refuses to deliver to someone who
+  // never pressed Start or who blocked the bot, and both look identical from
+  // here — a 403. Recording it stops us from asking again every evening.
+  dmEnabled  Boolean @default(true)
+  botBlocked Boolean @default(false)
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   lastSeenAt DateTime @default(now())
@@ -419,6 +426,11 @@ model Notification {
   body    String
   payload String? // JSON-encoded — SQLite has no native Json type, serialized manually
   isRead  Boolean @default(false)
+
+  // When this went out as a Telegram message. Null covers both "not worth a
+  // message" and "could not be delivered", which for throttling are the same
+  // thing: neither one reached the user, so neither should silence the next.
+  deliveredAt DateTime?
 
   createdAt DateTime @default(now())
 

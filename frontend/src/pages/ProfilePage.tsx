@@ -3,6 +3,7 @@ import { Sheet, SheetTitle, FieldHeading } from '@/components/layout/Sheet';
 import { StatsGrid } from '@/components/profile/StatsGrid';
 import { InviteBlock } from '@/components/profile/InviteBlock';
 import { PrivacyBlock } from '@/components/profile/PrivacyBlock';
+import { NotificationsBlock } from '@/components/profile/NotificationsBlock';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useStatistics } from '@/hooks/useProfile';
 import { xpIntoCurrentLevel } from '@/lib/leveling';
@@ -56,6 +57,8 @@ export function ProfilePage() {
       <div className="mt-2">{stats && <StatsGrid stats={stats} />}</div>
 
       <PrivacyBlock className="mt-8" />
+
+      <NotificationsBlock className="mt-8" />
 
       <InviteBlock className="mt-8" />
     </Sheet>

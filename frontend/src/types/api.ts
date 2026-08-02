@@ -161,6 +161,13 @@ export interface FriendRequest {
   user: Omit<PersonCard, 'friendState'>;
 }
 
+export interface NotificationSettings {
+  dmEnabled: boolean;
+  /** Observed, not chosen: Telegram refuses to deliver until the chat is open. */
+  botBlocked: boolean;
+  botLink: string | null;
+}
+
 export interface PrivacySettings {
   isDiscoverable: boolean;
   friends: number;

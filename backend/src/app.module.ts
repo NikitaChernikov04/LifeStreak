@@ -18,6 +18,8 @@ import { StatisticsModule } from './modules/statistics/statistics.module';
 import { InvitesModule } from './modules/invites/invites.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SocialModule } from './modules/social/social.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
+import { DigestModule } from './modules/digest/digest.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { SocialModule } from './modules/social/social.module';
     InvitesModule,
     NotificationsModule,
     SocialModule,
+    TelegramModule,
+    DigestModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

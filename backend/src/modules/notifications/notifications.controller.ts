@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { UpdateNotificationSettingsDto } from './dto/notification-settings.dto';
 
 @Controller({ path: 'notifications', version: '1' })
 export class NotificationsController {
@@ -17,13 +18,24 @@ export class NotificationsController {
     return this.notificationsService.unreadCount(userId);
   }
 
-  @Patch(':id/read')
-  markRead(@CurrentUser('id') userId: string, @Param('id') id: string) {
-    return this.notificationsService.markRead(userId, id);
+  // Declared before the parameterised routes so "settings" is never read as an id.
+  @Get('settings')
+  settings(@CurrentUser('id') userId: string) {
+    return this.notificationsService.settings(userId);
+  }
+
+  @Patch('settings')
+  updateSettings(@CurrentUser('id') userId: string, @Body() dto: UpdateNotificationSettingsDto) {
+    return this.notificationsService.updateSettings(userId, dto.dmEnabled);
   }
 
   @Patch('read-all')
   markAllRead(@CurrentUser('id') userId: string) {
     return this.notificationsService.markAllRead(userId);
+  }
+
+  @Patch(':id/read')
+  markRead(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.notificationsService.markRead(userId, id);
   }
 }
