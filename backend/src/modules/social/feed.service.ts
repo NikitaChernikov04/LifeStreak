@@ -20,17 +20,13 @@ export class FeedService {
   ) {}
 
   /**
-   * Checkins made by people the viewer follows, on streaks those people chose
-   * to share. Both conditions are re-read on every request rather than cached
-   * on the checkin: revoking a follow or un-sharing a streak has to take the
+   * Checkins made by this user's friends, on streaks those friends chose to
+   * share. Both conditions are re-read on every request rather than cached on
+   * the checkin: ending a friendship or un-sharing a streak has to take the
    * entry out of the feed immediately, including entries already written.
    */
   async feed(userId: string, query: PaginationQueryDto) {
-    const following = await this.prisma.follow.findMany({
-      where: { followerId: userId, status: 'ACCEPTED' },
-      select: { followingId: true },
-    });
-    const authorIds = following.map((f) => f.followingId);
+    const authorIds = await this.social.friendIds(userId);
     if (authorIds.length === 0) return paginate([], 0, query);
 
     const where = { userId: { in: authorIds }, streak: { is: { isShared: true } } };

@@ -3,11 +3,11 @@ import { usePrivacySettings, useSetStreakSharing, useUpdatePrivacy } from '@/hoo
 import { cn } from '@/lib/utils';
 
 /**
- * Two levels of consent, in the order they apply: who may read the profile at
- * all, and which streaks they get to see once allowed in. Both default to the
- * closed position — a habit journal is nobody's business until its owner says
- * otherwise, so the screen has to state what is currently visible rather than
- * assume the user remembers.
+ * Consent to be read lives in accepting a friend request, so this screen only
+ * carries what that decision does not cover: how findable you are before it,
+ * and which streaks a friend sees after it. Sharing defaults to off — a habit
+ * journal is nobody's business until its owner says otherwise, so the screen
+ * states what is currently visible rather than assuming the user remembers.
  */
 export function PrivacyBlock({ className }: { className?: string }) {
   const { data: settings } = usePrivacySettings();
@@ -16,35 +16,15 @@ export function PrivacyBlock({ className }: { className?: string }) {
 
   if (!settings) return null;
 
-  const open = settings.profileVisibility === 'OPEN';
   const sharedCount = settings.streaks.filter((s) => s.isShared).length;
 
   return (
     <section className={className}>
-      <FieldHeading>Кто тебя видит</FieldHeading>
+      <FieldHeading count={settings.friends > 0 ? `${settings.friends}` : undefined}>
+        Приватность
+      </FieldHeading>
 
       <div className="mt-3 border border-ink/25">
-        <button
-          type="button"
-          onClick={() =>
-            updatePrivacy.mutate({ profileVisibility: open ? 'PRIVATE' : 'OPEN' })
-          }
-          disabled={updatePrivacy.isPending}
-          className="flex w-full items-start gap-3 border-b border-ink/15 p-3 text-left"
-        >
-          <Box checked={open} />
-          <span className="min-w-0 flex-1">
-            <span className="block font-display text-base uppercase leading-tight tracking-[0.04em]">
-              Открытый профиль
-            </span>
-            <span className="mt-0.5 block text-[0.8125rem] leading-snug text-graphite">
-              {open
-                ? 'Подписаться можно без твоего подтверждения.'
-                : 'Каждая заявка ждёт твоего подтверждения.'}
-            </span>
-          </span>
-        </button>
-
         <button
           type="button"
           onClick={() => updatePrivacy.mutate({ isDiscoverable: !settings.isDiscoverable })}
@@ -66,7 +46,7 @@ export function PrivacyBlock({ className }: { className?: string }) {
       </div>
 
       <FieldHeading className="mt-6" count={`${sharedCount} из ${settings.streaks.length}`}>
-        Что видят подписчики
+        Что видят друзья
       </FieldHeading>
 
       {settings.streaks.length === 0 ? (
@@ -76,8 +56,8 @@ export function PrivacyBlock({ className }: { className?: string }) {
       ) : (
         <>
           <p className="mt-2 text-[0.8125rem] leading-snug text-graphite">
-            Подтверждённая заявка открывает профиль, а не каждую привычку. Отмечай только те серии,
-            которые готов показать.
+            Принятая заявка делает вас друзьями, но не открывает каждую привычку. Отмечай только те
+            серии, которые готов показать.
           </p>
           <div className="mt-2 border border-ink/25">
             {settings.streaks.map((streak, index) => (

@@ -1,16 +1,12 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { useFollow, useUnfollow } from '@/hooks/useSocial';
+import { useAddFriend, useRemoveFriend } from '@/hooks/useSocial';
 import { displayName, initials } from '@/lib/social';
 import type { PersonCard } from '@/types/api';
 
-/**
- * A person in a list. The button states the next action, not the current
- * relationship: "Подписаться" / "Ждёт" / "Отписаться" — a pending request is
- * shown as waiting rather than as something to press again.
- */
-export function PersonRow({ person, action }: { person: PersonCard; action?: React.ReactNode }) {
+export function PersonRow({ person, action }: { person: PersonCard; action?: ReactNode }) {
   return (
     <div className="flex items-center gap-3 border-b border-ink/15 py-3">
       <Link to={`/u/${person.id}`} className="shrink-0">
@@ -28,43 +24,60 @@ export function PersonRow({ person, action }: { person: PersonCard; action?: Rea
         </p>
         <p className="truncate font-mono text-micro uppercase text-graphite">
           {person.username ? `@${person.username} · ` : ''}ур. {person.level}
-          {person.followsMe && ' · читает тебя'}
         </p>
       </Link>
 
-      <div className="shrink-0">{action ?? <FollowButton person={person} />}</div>
+      <div className="shrink-0">{action ?? <FriendButton person={person} />}</div>
     </div>
   );
 }
 
-export function FollowButton({ person }: { person: PersonCard }) {
-  const follow = useFollow();
-  const unfollow = useUnfollow();
-  const busy = follow.isPending || unfollow.isPending;
+/**
+ * The button says what happens next, not what the relationship currently is.
+ * An incoming request is the one case with two answers, so it is the one case
+ * that shows two buttons — deciding it anywhere else would hide the choice.
+ */
+export function FriendButton({ person }: { person: PersonCard }) {
+  const add = useAddFriend();
+  const remove = useRemoveFriend();
+  const busy = add.isPending || remove.isPending;
 
-  if (person.followState === 'SELF') {
+  if (person.friendState === 'SELF') {
     return <span className="chip">Это ты</span>;
   }
 
-  if (person.followState === 'PENDING') {
+  if (person.friendState === 'FRIENDS') {
     return (
-      <Button size="sm" variant="quiet" disabled={busy} onClick={() => unfollow.mutate(person.id)}>
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => remove.mutate(person.id)}>
+        В друзьях
+      </Button>
+    );
+  }
+
+  if (person.friendState === 'OUTGOING') {
+    return (
+      <Button size="sm" variant="quiet" disabled={busy} onClick={() => remove.mutate(person.id)}>
         Ждёт · отменить
       </Button>
     );
   }
 
-  if (person.followState === 'ACCEPTED') {
+  if (person.friendState === 'INCOMING') {
     return (
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => unfollow.mutate(person.id)}>
-        Отписаться
-      </Button>
+      <div className="flex gap-1.5">
+        <Button size="sm" disabled={busy} onClick={() => add.mutate(person.id)}>
+          Принять
+        </Button>
+        <Button size="sm" variant="quiet" disabled={busy} onClick={() => remove.mutate(person.id)}>
+          Нет
+        </Button>
+      </div>
     );
   }
 
   return (
-    <Button size="sm" disabled={busy} onClick={() => follow.mutate(person.id)}>
-      Подписаться
+    <Button size="sm" disabled={busy} onClick={() => add.mutate(person.id)}>
+      Добавить
     </Button>
   );
 }

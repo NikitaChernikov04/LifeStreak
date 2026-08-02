@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { hapticImpact } from '@/lib/telegram';
-import { useFollowRequests } from '@/hooks/useSocial';
+import { useFriendRequests } from '@/hooks/useSocial';
 
 /**
  * Named for what's on the page, not for the app's structure. Labels are kept
@@ -17,7 +17,7 @@ const items = [
 
 /** Index tabs along the bottom edge of the notebook. The active one is inked in. */
 export function BottomNav() {
-  const { data: requests } = useFollowRequests();
+  const { data: requests } = useFriendRequests();
   const pending = requests?.length ?? 0;
 
   return (

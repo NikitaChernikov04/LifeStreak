@@ -3,18 +3,17 @@ import { api } from '@/lib/api';
 import { hapticImpact, hapticNotification } from '@/lib/telegram';
 import type {
   FeedEntry,
-  FollowRequest,
-  FollowState,
+  FriendRequest,
+  FriendState,
   Paginated,
   PersonCard,
   PrivacySettings,
-  ProfileVisibility,
   PublicProfile,
   ReactionKey,
   ReactionSummary,
 } from '@/types/api';
 
-/** Everything social shares one root key so a follow can refresh the lot. */
+/** Everything social shares one root key so one accepted request refreshes the lot. */
 const SOCIAL = ['social'] as const;
 
 export function useFeed() {
@@ -31,24 +30,24 @@ export function usePrivacySettings() {
   });
 }
 
-export function useFollowRequests() {
+export function useFriendRequests() {
   return useQuery({
     queryKey: [...SOCIAL, 'requests'],
-    queryFn: () => api.get<unknown, FollowRequest[]>('/social/requests'),
+    queryFn: () => api.get<unknown, FriendRequest[]>('/social/requests'),
   });
 }
 
-export function useFollowing() {
+export function useOutgoingRequests() {
   return useQuery({
-    queryKey: [...SOCIAL, 'following'],
-    queryFn: () => api.get<unknown, PersonCard[]>('/social/following'),
+    queryKey: [...SOCIAL, 'requests', 'outgoing'],
+    queryFn: () => api.get<unknown, PersonCard[]>('/social/requests/outgoing'),
   });
 }
 
-export function useFollowers() {
+export function useFriends() {
   return useQuery({
-    queryKey: [...SOCIAL, 'followers'],
-    queryFn: () => api.get<unknown, PersonCard[]>('/social/followers'),
+    queryKey: [...SOCIAL, 'friends'],
+    queryFn: () => api.get<unknown, PersonCard[]>('/social/friends'),
   });
 }
 
@@ -70,10 +69,10 @@ export function usePublicProfile(userId: string | undefined) {
   });
 }
 
-export function useFollow() {
+export function useAddFriend() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => api.post<unknown, { status: FollowState }>(`/social/follow/${userId}`),
+    mutationFn: (userId: string) => api.post<unknown, { status: FriendState }>(`/social/friends/${userId}`),
     onSuccess: () => {
       hapticImpact('light');
       queryClient.invalidateQueries({ queryKey: SOCIAL });
@@ -81,10 +80,11 @@ export function useFollow() {
   });
 }
 
-export function useUnfollow() {
+/** Cancels a request either way round, or ends a friendship. */
+export function useRemoveFriend() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => api.delete<unknown, { status: FollowState }>(`/social/follow/${userId}`),
+    mutationFn: (userId: string) => api.delete<unknown, { status: FriendState }>(`/social/friends/${userId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SOCIAL }),
   });
 }
@@ -93,7 +93,7 @@ export function useRespondToRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accept }: { id: string; accept: boolean }) =>
-      api.post<unknown, { status: FollowState }>(`/social/requests/${id}/${accept ? 'accept' : 'decline'}`),
+      api.post<unknown, { status: FriendState }>(`/social/requests/${id}/${accept ? 'accept' : 'decline'}`),
     onSuccess: () => {
       hapticNotification('success');
       queryClient.invalidateQueries({ queryKey: SOCIAL });
@@ -104,7 +104,7 @@ export function useRespondToRequest() {
 export function useUpdatePrivacy() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { profileVisibility?: ProfileVisibility; isDiscoverable?: boolean }) =>
+    mutationFn: (input: { isDiscoverable?: boolean }) =>
       api.patch<unknown, PrivacySettings>('/social/settings', input),
     onSuccess: (settings) => {
       queryClient.setQueryData([...SOCIAL, 'settings'], settings);

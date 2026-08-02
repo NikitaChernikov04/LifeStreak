@@ -33,14 +33,10 @@ model User {
   hearts    Int @default(3) // starting hearts, max 5
   maxHearts Int @default(5)
 
-  // Who may follow without asking. "PRIVATE" holds every new follower in
-  // PENDING until approved; "OPEN" accepts them on the spot. Default is
-  // PRIVATE because a journal of habits is not public by nature — see
-  // ProfileVisibility in common/enums.ts.
-  profileVisibility String  @default("PRIVATE")
-  // Whether the account turns up in search at all. Independent of the above:
-  // an OPEN profile can still choose not to be findable by handle.
-  isDiscoverable    Boolean @default(true)
+  // Whether the account turns up in search. Consent to be read lives in
+  // accepting a friend request, so this only decides how findable someone is
+  // before that conversation starts.
+  isDiscoverable Boolean @default(true)
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -57,9 +53,9 @@ model User {
   invitesSent Invite[] @relation("Inviter")
   invitesUsed Invite[] @relation("Invitee")
 
-  following Follow[]   @relation("Follower") // rows where this user is the one watching
-  followers Follow[]   @relation("Following") // rows where this user is the one watched
-  reactions Reaction[]
+  friendshipsSent     Friendship[] @relation("Requester")
+  friendshipsReceived Friendship[] @relation("Addressee")
+  reactions           Reaction[]
 
   @@index([telegramId])
   @@map("users")
@@ -265,28 +261,37 @@ model Invite {
 // ──────────────────────────────────────────────────────────────
 // SOCIAL GRAPH
 // ──────────────────────────────────────────────────────────────
-// One-way subscriptions: following someone says nothing about them following
-// back. status: "PENDING" | "ACCEPTED" — see FollowStatus in common/enums.ts.
-// A row exists from the moment the request is made; declining deletes it,
-// so a declined request can be retried later rather than being sealed shut.
+// Friendship is mutual and always asked for: one side requests, the other
+// answers, and once accepted the row means the same thing read from either
+// end. status: "PENDING" | "ACCEPTED" — see FriendshipStatus in
+// common/enums.ts.
+//
+// requester/addressee record who asked, not who owns the relation — they are
+// only consulted while the request is pending. One row per pair: the unique
+// index cannot express that on its own (it would still allow A→B and B→A), so
+// the service checks both directions before writing, and treats a crossing
+// request as agreement rather than a second row.
+//
+// Declining deletes the row instead of storing a refusal, so the same request
+// can be made again later. That is deliberately not blocking.
 
-model Follow {
+model Friendship {
   id String @id @default(cuid())
 
-  followerId String
-  follower   User   @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User   @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
 
-  followingId String
-  following   User   @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User   @relation("Addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
 
   status      String    @default("PENDING")
   createdAt   DateTime  @default(now())
   respondedAt DateTime?
 
-  @@unique([followerId, followingId])
-  @@index([followingId, status])
-  @@index([followerId, status])
-  @@map("follows")
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+  @@map("friendships")
 }
 
 // ──────────────────────────────────────────────────────────────

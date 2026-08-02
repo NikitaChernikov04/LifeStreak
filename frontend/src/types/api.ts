@@ -139,8 +139,8 @@ export interface Invite {
 
 // ── social ────────────────────────────────────────────────────
 
-export type FollowState = 'SELF' | 'NONE' | 'PENDING' | 'ACCEPTED';
-export type ProfileVisibility = 'PRIVATE' | 'OPEN';
+/** OUTGOING — you asked; INCOMING — they did. Different buttons, so different states. */
+export type FriendState = 'SELF' | 'NONE' | 'OUTGOING' | 'INCOMING' | 'FRIENDS';
 export type ReactionKey = 'LIKE' | 'FIRE' | 'CLAP' | 'STRONG' | 'HEART';
 
 /** A person as they appear in search, lists and the feed. */
@@ -151,21 +151,19 @@ export interface PersonCard {
   username: string | null;
   avatarUrl: string | null;
   level: number;
-  followState: FollowState;
-  followsMe?: boolean;
+  friendState: FriendState;
+  requestedAt?: string;
 }
 
-export interface FollowRequest {
+export interface FriendRequest {
   id: string;
   createdAt: string;
-  user: Omit<PersonCard, 'followState'>;
+  user: Omit<PersonCard, 'friendState'>;
 }
 
 export interface PrivacySettings {
-  profileVisibility: ProfileVisibility;
   isDiscoverable: boolean;
-  followers: number;
-  following: number;
+  friends: number;
   pendingRequests: number;
   streaks: { id: string; title: string; icon: string; isShared: boolean; currentCount: number }[];
 }
@@ -187,8 +185,7 @@ export interface PublicProfile extends PersonCard {
   xp: number;
   createdAt: string;
   canView: boolean;
-  followers: number;
-  following: number;
+  friends: number;
   streaks: SharedStreak[];
   statistics: {
     totalXp: number;

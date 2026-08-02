@@ -33,21 +33,16 @@ export class SocialController {
     return this.social.setStreakSharing(userId, streakId, dto.isShared);
   }
 
-  // ── graph ───────────────────────────────────────────────────
+  // ── friends ─────────────────────────────────────────────────
 
   @Get('search')
   search(@CurrentUser('id') userId: string, @Query() dto: SearchUsersDto) {
     return this.social.searchUsers(userId, dto.q);
   }
 
-  @Get('following')
-  following(@CurrentUser('id') userId: string) {
-    return this.social.listFollowing(userId);
-  }
-
-  @Get('followers')
-  followers(@CurrentUser('id') userId: string) {
-    return this.social.listFollowers(userId);
+  @Get('friends')
+  friends(@CurrentUser('id') userId: string) {
+    return this.social.listFriends(userId);
   }
 
   @Get('requests')
@@ -55,29 +50,30 @@ export class SocialController {
     return this.social.incomingRequests(userId);
   }
 
+  @Get('requests/outgoing')
+  outgoing(@CurrentUser('id') userId: string) {
+    return this.social.outgoingRequests(userId);
+  }
+
   @Post('requests/:id/accept')
-  accept(@CurrentUser('id') userId: string, @Param('id') followId: string) {
-    return this.social.respondToRequest(userId, followId, true);
+  accept(@CurrentUser('id') userId: string, @Param('id') friendshipId: string) {
+    return this.social.respond(userId, friendshipId, true);
   }
 
   @Post('requests/:id/decline')
-  decline(@CurrentUser('id') userId: string, @Param('id') followId: string) {
-    return this.social.respondToRequest(userId, followId, false);
+  decline(@CurrentUser('id') userId: string, @Param('id') friendshipId: string) {
+    return this.social.respond(userId, friendshipId, false);
   }
 
-  @Post('follow/:id')
-  follow(@CurrentUser('id') userId: string, @Param('id') targetId: string) {
-    return this.social.follow(userId, targetId);
+  @Post('friends/:id')
+  addFriend(@CurrentUser('id') userId: string, @Param('id') targetId: string) {
+    return this.social.request(userId, targetId);
   }
 
-  @Delete('follow/:id')
-  unfollow(@CurrentUser('id') userId: string, @Param('id') targetId: string) {
-    return this.social.unfollow(userId, targetId);
-  }
-
-  @Delete('followers/:id')
-  removeFollower(@CurrentUser('id') userId: string, @Param('id') followerId: string) {
-    return this.social.removeFollower(userId, followerId);
+  /** Cancels a request in either direction, or ends an existing friendship. */
+  @Delete('friends/:id')
+  removeFriend(@CurrentUser('id') userId: string, @Param('id') targetId: string) {
+    return this.social.remove(userId, targetId);
   }
 
   // ── feed ────────────────────────────────────────────────────

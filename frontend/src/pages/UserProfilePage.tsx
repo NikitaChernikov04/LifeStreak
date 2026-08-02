@@ -1,9 +1,9 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Sheet, SheetTitle, FieldHeading } from '@/components/layout/Sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { FollowButton } from '@/components/social/PersonRow';
+import { FriendButton } from '@/components/social/PersonRow';
 import { usePublicProfile } from '@/hooks/useSocial';
-import { displayName, initials, readersLine } from '@/lib/social';
+import { displayName, friendsLine, initials } from '@/lib/social';
 import { pluralizeDays } from '@/lib/streak';
 
 /**
@@ -58,24 +58,26 @@ export function UserProfilePage() {
             {profile.username && <>@{profile.username} · </>}уровень {profile.level}
           </p>
           <p className="mt-1 font-mono text-micro uppercase text-graphite">
-            {readersLine(profile.followers)} · читает {profile.following}
+            {friendsLine(profile.friends)}
           </p>
         </div>
       </div>
 
-      {profile.followState !== 'SELF' && (
+      {profile.friendState !== 'SELF' && (
         <div className="mt-4">
-          <FollowButton person={profile} />
+          <FriendButton person={profile} />
         </div>
       )}
 
       {!profile.canView ? (
         <div className="mt-8 border border-dashed border-ink/40 bg-paper-edge/60 p-6 text-center">
-          <p className="font-display text-lg uppercase tracking-[0.05em]">Профиль закрыт</p>
+          <p className="font-display text-lg uppercase tracking-[0.05em]">Записи скрыты</p>
           <p className="mt-2 text-sm leading-snug text-graphite">
-            {profile.followState === 'PENDING'
-              ? 'Заявка отправлена. Записи откроются, когда её подтвердят.'
-              : 'Подпишись, и владелец решит, показывать ли свои записи.'}
+            {profile.friendState === 'OUTGOING'
+              ? 'Заявка отправлена. Записи откроются, когда её примут.'
+              : profile.friendState === 'INCOMING'
+                ? 'Этот человек уже позвал тебя в друзья — прими заявку.'
+                : 'Записи видны только друзьям.'}
           </p>
         </div>
       ) : (
@@ -93,7 +95,7 @@ export function UserProfilePage() {
           )}
 
           <FieldHeading className="mt-8">
-            {profile.followState === 'SELF' ? 'Твои серии' : 'Открытые серии'}
+            {profile.friendState === 'SELF' ? 'Твои серии' : 'Открытые серии'}
           </FieldHeading>
           {profile.streaks.length === 0 ? (
             <p className="py-3 text-sm leading-snug text-graphite">

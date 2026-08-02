@@ -41,12 +41,8 @@ export type HeartReason = (typeof HEART_REASONS)[number];
 export const INVITE_STATUSES = ['PENDING', 'ACCEPTED'] as const;
 export type InviteStatus = (typeof INVITE_STATUSES)[number];
 
-export const FOLLOW_STATUSES = ['PENDING', 'ACCEPTED'] as const;
-export type FollowStatus = (typeof FOLLOW_STATUSES)[number];
-
-/** PRIVATE holds new followers for approval; OPEN accepts them immediately. */
-export const PROFILE_VISIBILITIES = ['PRIVATE', 'OPEN'] as const;
-export type ProfileVisibility = (typeof PROFILE_VISIBILITIES)[number];
+export const FRIENDSHIP_STATUSES = ['PENDING', 'ACCEPTED'] as const;
+export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
 
 /** Stored as keys, not emoji: the glyph is a rendering decision. */
 export const REACTION_KEYS = ['LIKE', 'FIRE', 'CLAP', 'STRONG', 'HEART'] as const;
@@ -60,9 +56,8 @@ export const NOTIFICATION_TYPES = [
   'HEART_EARNED',
   'FRIEND_INVITED',
   'CHALLENGE_AVAILABLE',
-  'FOLLOW_REQUEST',
-  'FOLLOW_ACCEPTED',
-  'NEW_FOLLOWER',
+  'FRIEND_REQUEST',
+  'FRIEND_ACCEPTED',
   'REACTION_RECEIVED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

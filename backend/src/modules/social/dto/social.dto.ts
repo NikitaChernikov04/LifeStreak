@@ -1,12 +1,8 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsOptional, IsString, Length } from 'class-validator';
-import { PROFILE_VISIBILITIES, REACTION_KEYS, ProfileVisibility, ReactionKey } from '../../../common/enums';
+import { REACTION_KEYS, ReactionKey } from '../../../common/enums';
 
 export class UpdatePrivacyDto {
-  @IsOptional()
-  @IsIn(PROFILE_VISIBILITIES)
-  profileVisibility?: ProfileVisibility;
-
   @IsOptional()
   @IsBoolean()
   isDiscoverable?: boolean;

@@ -3,8 +3,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdatePrivacyDto } from './dto/social.dto';
 
-/** How the viewer stands in relation to another account. */
-export type FollowState = 'SELF' | 'NONE' | 'PENDING' | 'ACCEPTED';
+/**
+ * How the viewer stands towards another account.
+ * INCOMING/OUTGOING distinguish who is waiting on whom — the two states need
+ * different buttons, and collapsing them into "PENDING" would ask the person
+ * who was invited to invite back.
+ */
+export type FriendState = 'SELF' | 'NONE' | 'OUTGOING' | 'INCOMING' | 'FRIENDS';
 
 const USER_CARD = {
   id: true,
@@ -15,7 +20,7 @@ const USER_CARD = {
   level: true,
 } as const;
 
-/** Fields of a streak that a follower is allowed to see. */
+/** Fields of a streak a friend is allowed to see. */
 const SHARED_STREAK = {
   id: true,
   title: true,
@@ -40,51 +45,24 @@ export class SocialService {
   async getSettings(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { profileVisibility: true, isDiscoverable: true },
+      select: { isDiscoverable: true },
     });
 
-    const [followers, following, pendingRequests] = await Promise.all([
-      this.prisma.follow.count({ where: { followingId: userId, status: 'ACCEPTED' } }),
-      this.prisma.follow.count({ where: { followerId: userId, status: 'ACCEPTED' } }),
-      this.prisma.follow.count({ where: { followingId: userId, status: 'PENDING' } }),
+    const [friends, pendingRequests, streaks] = await Promise.all([
+      this.countFriends(userId),
+      this.prisma.friendship.count({ where: { addresseeId: userId, status: 'PENDING' } }),
+      this.prisma.streak.findMany({
+        where: { userId, status: { not: 'ARCHIVED' } },
+        select: { id: true, title: true, icon: true, isShared: true, currentCount: true },
+        orderBy: { createdAt: 'asc' },
+      }),
     ]);
 
-    const streaks = await this.prisma.streak.findMany({
-      where: { userId, status: { not: 'ARCHIVED' } },
-      select: { id: true, title: true, icon: true, isShared: true, currentCount: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return { ...user, followers, following, pendingRequests, streaks };
+    return { ...user, friends, pendingRequests, streaks };
   }
 
-  /**
-   * Loosening visibility to OPEN admits everyone already waiting: a pending
-   * request is a question this setting has just answered. Tightening it back
-   * to PRIVATE leaves existing followers alone — revoking access is a separate,
-   * deliberate act (removeFollower), not a side effect of a settings toggle.
-   */
   async updateSettings(userId: string, dto: UpdatePrivacyDto) {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: dto,
-      select: { profileVisibility: true, isDiscoverable: true },
-    });
-
-    if (dto.profileVisibility === 'OPEN') {
-      const pending = await this.prisma.follow.findMany({
-        where: { followingId: userId, status: 'PENDING' },
-        select: { id: true, followerId: true },
-      });
-      if (pending.length > 0) {
-        await this.prisma.follow.updateMany({
-          where: { id: { in: pending.map((f) => f.id) } },
-          data: { status: 'ACCEPTED', respondedAt: new Date() },
-        });
-        await Promise.all(pending.map((f) => this.notifyAccepted(f.followerId, userId)));
-      }
-    }
-
+    await this.prisma.user.update({ where: { id: userId }, data: dto });
     return this.getSettings(userId);
   }
 
@@ -103,119 +81,120 @@ export class SocialService {
   // ── graph ───────────────────────────────────────────────────
 
   /**
-   * A request to an OPEN profile is accepted on the spot; a PRIVATE one waits
-   * for its owner. Re-requesting an existing follow is a no-op rather than an
-   * error — the button that triggers it may simply have been tapped twice.
+   * Sending a request when the other side already sent one is not a second
+   * row — two people asking for the same thing have agreed, so the pending
+   * request is accepted instead.
    */
-  async follow(userId: string, targetId: string) {
-    if (userId === targetId) throw new BadRequestException('Нельзя подписаться на себя');
+  async request(userId: string, targetId: string) {
+    if (userId === targetId) throw new BadRequestException('Нельзя добавить в друзья себя');
 
     const target = await this.prisma.user.findUnique({
       where: { id: targetId },
-      select: { id: true, profileVisibility: true, firstName: true, username: true },
+      select: { id: true },
     });
     if (!target) throw new NotFoundException('Пользователь не найден');
 
-    const existing = await this.prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId: userId, followingId: targetId } },
-    });
-    if (existing) return { status: existing.status as FollowState };
+    const existing = await this.findEdge(userId, targetId);
+    if (existing) {
+      if (existing.status === 'ACCEPTED') return { status: 'FRIENDS' as FriendState };
+      if (existing.requesterId === userId) return { status: 'OUTGOING' as FriendState };
+      return this.respond(userId, existing.id, true);
+    }
 
-    const autoAccept = target.profileVisibility === 'OPEN';
-    const follow = await this.prisma.follow.create({
-      data: {
-        followerId: userId,
-        followingId: targetId,
-        status: autoAccept ? 'ACCEPTED' : 'PENDING',
-        respondedAt: autoAccept ? new Date() : null,
-      },
+    await this.prisma.friendship.create({
+      data: { requesterId: userId, addresseeId: targetId },
     });
-
-    const me = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { firstName: true, username: true },
-    });
-    const who = me.username ? `@${me.username}` : me.firstName;
 
     await this.notifications.create(
       targetId,
-      autoAccept ? 'NEW_FOLLOWER' : 'FOLLOW_REQUEST',
-      autoAccept ? 'Новый подписчик' : 'Заявка на подписку',
-      autoAccept
-        ? `${who} теперь следит за твоим прогрессом`
-        : `${who} хочет видеть твой прогресс — подтверди или отклони`,
-      { followId: follow.id, userId },
+      'FRIEND_REQUEST',
+      'Заявка в друзья',
+      `${await this.nameOf(userId)} хочет дружить — подтверди или отклони`,
+      { userId },
     );
 
-    return { status: follow.status as FollowState };
-  }
-
-  async unfollow(userId: string, targetId: string) {
-    await this.prisma.follow.deleteMany({ where: { followerId: userId, followingId: targetId } });
-    return { status: 'NONE' as FollowState };
-  }
-
-  /** Cuts off someone who already follows you. */
-  async removeFollower(userId: string, followerId: string) {
-    await this.prisma.follow.deleteMany({ where: { followerId, followingId: userId } });
-    return { ok: true };
-  }
-
-  async incomingRequests(userId: string) {
-    const rows = await this.prisma.follow.findMany({
-      where: { followingId: userId, status: 'PENDING' },
-      select: { id: true, createdAt: true, follower: { select: USER_CARD } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return rows.map((r) => ({ id: r.id, createdAt: r.createdAt, user: r.follower }));
+    return { status: 'OUTGOING' as FriendState };
   }
 
   /**
-   * Declining deletes the row instead of parking it in a DECLINED state: the
-   * asker is never told "no" explicitly, and can ask again later if things
-   * change. A permanent refusal is what blocking would be, and that is a
-   * different feature.
+   * Accepting is symmetric: from here both sides read each other on the same
+   * terms, so only one notification is needed — the one who asked.
    */
-  async respondToRequest(userId: string, followId: string, accept: boolean) {
-    const request = await this.prisma.follow.findUnique({ where: { id: followId } });
-    if (!request || request.followingId !== userId) throw new NotFoundException('Заявка не найдена');
-    if (request.status !== 'PENDING') throw new BadRequestException('Заявка уже обработана');
+  async respond(userId: string, friendshipId: string, accept: boolean) {
+    const friendship = await this.prisma.friendship.findUnique({ where: { id: friendshipId } });
+    if (!friendship || friendship.addresseeId !== userId) {
+      throw new NotFoundException('Заявка не найдена');
+    }
+    if (friendship.status !== 'PENDING') throw new BadRequestException('Заявка уже обработана');
 
     if (!accept) {
-      await this.prisma.follow.delete({ where: { id: followId } });
-      return { status: 'NONE' as FollowState };
+      await this.prisma.friendship.delete({ where: { id: friendshipId } });
+      return { status: 'NONE' as FriendState };
     }
 
-    await this.prisma.follow.update({
-      where: { id: followId },
+    await this.prisma.friendship.update({
+      where: { id: friendshipId },
       data: { status: 'ACCEPTED', respondedAt: new Date() },
     });
-    await this.notifyAccepted(request.followerId, userId);
-    return { status: 'ACCEPTED' as FollowState };
+
+    await this.notifications.create(
+      friendship.requesterId,
+      'FRIEND_ACCEPTED',
+      'Теперь вы друзья',
+      `${await this.nameOf(userId)} принял заявку — вам видны записи друг друга`,
+      { userId },
+    );
+
+    return { status: 'FRIENDS' as FriendState };
   }
 
-  async listFollowing(userId: string) {
-    const rows = await this.prisma.follow.findMany({
-      where: { followerId: userId },
-      select: { status: true, following: { select: USER_CARD } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return rows.map((r) => ({ ...r.following, followState: r.status as FollowState }));
+  /** Cancels an outgoing request, declines an incoming one, or ends a friendship. */
+  async remove(userId: string, targetId: string) {
+    const edge = await this.findEdge(userId, targetId);
+    if (edge) await this.prisma.friendship.delete({ where: { id: edge.id } });
+    return { status: 'NONE' as FriendState };
   }
 
-  async listFollowers(userId: string) {
-    const rows = await this.prisma.follow.findMany({
-      where: { followingId: userId, status: 'ACCEPTED' },
-      select: { follower: { select: USER_CARD } },
+  async listFriends(userId: string) {
+    const rows = await this.prisma.friendship.findMany({
+      where: {
+        status: 'ACCEPTED',
+        OR: [{ requesterId: userId }, { addresseeId: userId }],
+      },
+      select: {
+        requester: { select: USER_CARD },
+        addressee: { select: USER_CARD },
+        requesterId: true,
+      },
+      orderBy: { respondedAt: 'desc' },
+    });
+
+    return rows.map((row) => ({
+      ...(row.requesterId === userId ? row.addressee : row.requester),
+      friendState: 'FRIENDS' as FriendState,
+    }));
+  }
+
+  async incomingRequests(userId: string) {
+    const rows = await this.prisma.friendship.findMany({
+      where: { addresseeId: userId, status: 'PENDING' },
+      select: { id: true, createdAt: true, requester: { select: USER_CARD } },
       orderBy: { createdAt: 'desc' },
     });
-    const followers = rows.map((r) => r.follower);
-    const back = await this.prisma.follow.findMany({
-      where: { followerId: userId, followingId: { in: followers.map((f) => f.id) } },
-      select: { followingId: true, status: true },
+    return rows.map((r) => ({ id: r.id, createdAt: r.createdAt, user: r.requester }));
+  }
+
+  async outgoingRequests(userId: string) {
+    const rows = await this.prisma.friendship.findMany({
+      where: { requesterId: userId, status: 'PENDING' },
+      select: { id: true, createdAt: true, addressee: { select: USER_CARD } },
+      orderBy: { createdAt: 'desc' },
     });
-    const backMap = new Map(back.map((b) => [b.followingId, b.status as FollowState]));
-    return followers.map((f) => ({ ...f, followState: backMap.get(f.id) ?? ('NONE' as FollowState) }));
+    return rows.map((r) => ({
+      ...r.addressee,
+      friendState: 'OUTGOING' as FriendState,
+      requestedAt: r.createdAt,
+    }));
   }
 
   /**
@@ -230,7 +209,7 @@ export class SocialService {
 
     const candidates = await this.prisma.user.findMany({
       where: { isDiscoverable: true, id: { not: userId } },
-      select: { ...USER_CARD, profileVisibility: true },
+      select: USER_CARD,
       orderBy: { lastSeenAt: 'desc' },
       take: 500,
     });
@@ -244,37 +223,32 @@ export class SocialService {
       )
       .slice(0, 20);
 
-    return this.withFollowState(userId, matches);
+    return this.withFriendState(userId, matches);
   }
 
   // ── profile ─────────────────────────────────────────────────
 
   /**
-   * Returns the profile as this viewer is allowed to see it. A profile the
-   * viewer may not read still returns its owner's name and level: that is what
-   * they saw in search, and hiding it would leave them unable to tell whom
-   * they just asked to follow.
+   * The profile as this viewer may see it. A stranger still gets the name and
+   * level they already saw in search — hiding those would leave them unable to
+   * tell whom they just asked to befriend — but nothing else.
    */
   async getProfile(viewerId: string, targetId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: targetId },
-      select: { ...USER_CARD, xp: true, profileVisibility: true, createdAt: true },
+      select: { ...USER_CARD, xp: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('Пользователь не найден');
 
-    const [state] = await this.withFollowState(viewerId, [user]);
-    const canView = state.followState === 'SELF' || state.followState === 'ACCEPTED';
-
-    const [followers, following] = await Promise.all([
-      this.prisma.follow.count({ where: { followingId: targetId, status: 'ACCEPTED' } }),
-      this.prisma.follow.count({ where: { followerId: targetId, status: 'ACCEPTED' } }),
-    ]);
+    const [state] = await this.withFriendState(viewerId, [user]);
+    const canView = state.friendState === 'SELF' || state.friendState === 'FRIENDS';
+    const friends = await this.countFriends(targetId);
 
     if (!canView) {
-      return { ...state, canView, streaks: [], statistics: null, followers, following };
+      return { ...state, canView, streaks: [], statistics: null, friends };
     }
 
-    const isSelf = state.followState === 'SELF';
+    const isSelf = state.friendState === 'SELF';
     const [streaks, statistics] = await Promise.all([
       this.prisma.streak.findMany({
         where: {
@@ -296,54 +270,79 @@ export class SocialService {
       }),
     ]);
 
-    return { ...state, canView, streaks, statistics, followers, following };
+    return { ...state, canView, streaks, statistics, friends };
   }
 
-  /** True when `viewerId` is allowed to read `targetId`'s shared content. */
+  /** True when the two are friends — the only relation that grants reading. */
   async canView(viewerId: string, targetId: string): Promise<boolean> {
     if (viewerId === targetId) return true;
-    const follow = await this.prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId: viewerId, followingId: targetId } },
-      select: { status: true },
-    });
-    return follow?.status === 'ACCEPTED';
+    const edge = await this.findEdge(viewerId, targetId);
+    return edge?.status === 'ACCEPTED';
   }
 
-  private async withFollowState<T extends { id: string }>(viewerId: string, users: T[]) {
-    const others = users.filter((u) => u.id !== viewerId).map((u) => u.id);
-    const [outgoing, incoming] = await Promise.all([
-      this.prisma.follow.findMany({
-        where: { followerId: viewerId, followingId: { in: others } },
-        select: { followingId: true, status: true },
-      }),
-      this.prisma.follow.findMany({
-        where: { followerId: { in: others }, followingId: viewerId, status: 'ACCEPTED' },
-        select: { followerId: true },
-      }),
-    ]);
+  /** Ids of everyone this user is actually friends with, both directions. */
+  async friendIds(userId: string): Promise<string[]> {
+    const rows = await this.prisma.friendship.findMany({
+      where: { status: 'ACCEPTED', OR: [{ requesterId: userId }, { addresseeId: userId }] },
+      select: { requesterId: true, addresseeId: true },
+    });
+    return rows.map((r) => (r.requesterId === userId ? r.addresseeId : r.requesterId));
+  }
 
-    const outMap = new Map(outgoing.map((f) => [f.followingId, f.status as FollowState]));
-    const followsMe = new Set(incoming.map((f) => f.followerId));
+  /** The single row between two people, whichever way round it was written. */
+  private async findEdge(a: string, b: string) {
+    return this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { requesterId: a, addresseeId: b },
+          { requesterId: b, addresseeId: a },
+        ],
+      },
+    });
+  }
+
+  private countFriends(userId: string) {
+    return this.prisma.friendship.count({
+      where: { status: 'ACCEPTED', OR: [{ requesterId: userId }, { addresseeId: userId }] },
+    });
+  }
+
+  private async withFriendState<T extends { id: string }>(viewerId: string, users: T[]) {
+    const others = users.filter((u) => u.id !== viewerId).map((u) => u.id);
+    const edges = await this.prisma.friendship.findMany({
+      where: {
+        OR: [
+          { requesterId: viewerId, addresseeId: { in: others } },
+          { addresseeId: viewerId, requesterId: { in: others } },
+        ],
+      },
+      select: { requesterId: true, addresseeId: true, status: true },
+    });
+
+    const states = new Map<string, FriendState>();
+    for (const edge of edges) {
+      const other = edge.requesterId === viewerId ? edge.addresseeId : edge.requesterId;
+      states.set(
+        other,
+        edge.status === 'ACCEPTED'
+          ? 'FRIENDS'
+          : edge.requesterId === viewerId
+            ? 'OUTGOING'
+            : 'INCOMING',
+      );
+    }
 
     return users.map((u) => ({
       ...u,
-      followState: (u.id === viewerId ? 'SELF' : (outMap.get(u.id) ?? 'NONE')) as FollowState,
-      followsMe: followsMe.has(u.id),
+      friendState: (u.id === viewerId ? 'SELF' : (states.get(u.id) ?? 'NONE')) as FriendState,
     }));
   }
 
-  private async notifyAccepted(followerId: string, targetId: string) {
-    const target = await this.prisma.user.findUniqueOrThrow({
-      where: { id: targetId },
+  private async nameOf(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
       select: { firstName: true, username: true },
     });
-    const who = target.username ? `@${target.username}` : target.firstName;
-    await this.notifications.create(
-      followerId,
-      'FOLLOW_ACCEPTED',
-      'Заявка принята',
-      `${who} открыл тебе свой прогресс`,
-      { userId: targetId },
-    );
+    return user.username ? `@${user.username}` : user.firstName;
   }
 }
