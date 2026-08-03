@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { useCheckinGoal, useCompleteGoal, useJoinGoal, useLeaveGoal } from '@/hooks/useSocial';
+import {
+  useAttachProof,
+  useCheckinGoal,
+  useCompleteGoal,
+  useJoinGoal,
+  useLeaveGoal,
+} from '@/hooks/useSocial';
+import { useProofImage } from '@/hooks/useProofImage';
+import { compressImage, formatBytes, type CompressedImage } from '@/lib/image';
 import { cn } from '@/lib/utils';
-import type { GroupGoal, VersusView } from '@/types/api';
+import type { GoalProof, GroupGoal, VersusView } from '@/types/api';
 
 /**
  * A bet two friends made, scored in sprints.
@@ -18,8 +26,14 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
   const [proofOpen, setProofOpen] = useState(false);
   const [note, setNote] = useState('');
   const [url, setUrl] = useState('');
+  const [photo, setPhoto] = useState<CompressedImage | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [squeezing, setSqueezing] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const checkin = useCheckinGoal();
+  const attach = useAttachProof();
   const complete = useCompleteGoal();
   const join = useJoinGoal();
   const leave = useLeaveGoal();
@@ -30,13 +44,56 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
   const invited = goal.myStatus === 'INVITED';
   const done = goal.status === 'COMPLETED' || versus.over;
   const progress = Math.min(100, (versus.sprintNumber / versus.sprintCount) * 100);
+  const busy = checkin.isPending || attach.isPending || squeezing;
 
-  const mark = () => {
-    checkin.mutate({
+  function dropPhoto() {
+    setPhoto(null);
+    setPhotoPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+    if (fileInput.current) fileInput.current.value = '';
+  }
+
+  /**
+   * The photo is shrunk here, in the browser, before anything is sent. A
+   * picture straight off a camera is several megabytes — slow on a phone
+   * network and far more than a card needs.
+   */
+  async function pickPhoto(file: File) {
+    setPhotoError(null);
+    setSqueezing(true);
+    try {
+      const compressed = await compressImage(file);
+      dropPhoto();
+      setPhoto(compressed);
+      setPhotoPreview(URL.createObjectURL(compressed.blob));
+    } catch {
+      setPhotoError('Не получилось прочитать этот файл');
+    } finally {
+      setSqueezing(false);
+    }
+  }
+
+  async function upload() {
+    if (!photo) return;
+    const extension = photo.blob.type === 'image/webp' ? 'webp' : 'jpg';
+    await attach.mutateAsync({
+      goalId: goal.id,
+      blob: photo.blob,
+      filename: `proof.${extension}`,
+    });
+    dropPhoto();
+  }
+
+  const mark = async () => {
+    await checkin.mutateAsync({
       goal,
       proofNote: note.trim() || undefined,
       proofUrl: url.trim() || undefined,
     });
+    // Only after the day is recorded, so a failed upload never costs the mark.
+    await upload();
     setNote('');
     setUrl('');
     setProofOpen(false);
@@ -76,13 +133,8 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
           ) : goal.markedToday ? (
             <span className="chip mt-0.5 shrink-0">✓ День отмечен</span>
           ) : (
-            <Button
-              size="sm"
-              className="mt-0.5 shrink-0"
-              disabled={checkin.isPending}
-              onClick={mark}
-            >
-              Отметить день
+            <Button size="sm" className="mt-0.5 shrink-0" disabled={busy} onClick={mark}>
+              {squeezing ? 'Сжимаю…' : 'Отметить день'}
             </Button>
           )}
         </div>
@@ -115,32 +167,98 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
           </p>
         )}
 
-        {!invited && versus.proofs.length > 0 && <Proofs versus={versus} />}
+        {!invited && versus.proofs.length > 0 && <Proofs goalId={goal.id} versus={versus} />}
 
         {/* The evidence field, opened by hand. It is never a gate: the button
             above marks the day whether or not anything is filled in here. */}
-        {!done && !invited && !goal.markedToday && (
+        {!done && !invited && goal.myStatus === 'JOINED' && (
           <div className="mt-2">
-            {proofOpen ? (
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void pickPhoto(file);
+              }}
+            />
+
+            {proofOpen || goal.markedToday ? (
               <div className="border border-dashed border-ink/30 p-2.5">
-                <input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  maxLength={280}
-                  placeholder="Что именно сделал"
-                  className="w-full border-b border-ink/20 bg-transparent pb-1 text-[0.875rem] outline-none placeholder:text-graphite/70"
-                />
-                <input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  maxLength={500}
-                  inputMode="url"
-                  placeholder="Ссылка на скрин или коммит"
-                  className="mt-2 w-full border-b border-ink/20 bg-transparent pb-1 font-mono text-[0.75rem] outline-none placeholder:text-graphite/70"
-                />
+                {!goal.markedToday && (
+                  <>
+                    <input
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      maxLength={280}
+                      placeholder="Что именно сделал"
+                      className="w-full border-b border-ink/20 bg-transparent pb-1 text-[0.875rem] outline-none placeholder:text-graphite/70"
+                    />
+                    <input
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      maxLength={500}
+                      inputMode="url"
+                      placeholder="Ссылка на скрин или коммит"
+                      className="mt-2 w-full border-b border-ink/20 bg-transparent pb-1 font-mono text-[0.75rem] outline-none placeholder:text-graphite/70"
+                    />
+                  </>
+                )}
+
+                {photoPreview && photo ? (
+                  <div className="mt-2">
+                    <img
+                      src={photoPreview}
+                      alt="Выбранный пруф"
+                      className="max-h-40 w-full border border-ink/20 object-contain"
+                    />
+                    {/* Said out loud, because the file that leaves the phone is
+                        not the file that was picked. */}
+                    <p className="mt-1 font-mono text-micro uppercase text-graphite">
+                      {formatBytes(photo.originalBytes)} → {formatBytes(photo.blob.size)} ·{' '}
+                      {photo.width}×{photo.height}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-3 font-mono text-micro uppercase">
+                      <button
+                        onClick={() => fileInput.current?.click()}
+                        className="text-graphite underline underline-offset-2 hover:text-ink"
+                      >
+                        другое фото
+                      </button>
+                      <button
+                        onClick={dropPhoto}
+                        className="text-vermilion underline underline-offset-2"
+                      >
+                        убрать
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInput.current?.click()}
+                    disabled={squeezing}
+                    className="mt-2 font-mono text-micro uppercase text-graphite underline underline-offset-2 transition-colors hover:text-ink disabled:opacity-50"
+                  >
+                    {squeezing ? 'сжимаю…' : '+ фото или скрин'}
+                  </button>
+                )}
+
+                {photoError && (
+                  <p className="mt-1 font-mono text-micro uppercase text-vermilion">{photoError}</p>
+                )}
+
                 <p className="mt-2 font-mono text-micro uppercase leading-relaxed text-graphite">
                   видят только те, кто в споре. Никто не подтверждает — просто видно
                 </p>
+
+                {/* Marking already happened; this button exists only to send a
+                    photo added after the fact. */}
+                {goal.markedToday && photo && (
+                  <Button size="sm" className="mt-2 w-full" disabled={busy} onClick={upload}>
+                    Приложить пруф
+                  </Button>
+                )}
               </div>
             ) : (
               <button
@@ -246,7 +364,7 @@ function Standings({ versus }: { versus: VersusView }) {
 }
 
 /** Evidence, newest first. Nobody approves it — it is here to be seen. */
-function Proofs({ versus }: { versus: VersusView }) {
+function Proofs({ goalId, versus }: { goalId: string; versus: VersusView }) {
   const [open, setOpen] = useState(false);
   const shown = open ? versus.proofs : versus.proofs.slice(0, 2);
 
@@ -254,25 +372,9 @@ function Proofs({ versus }: { versus: VersusView }) {
     <div className="mt-2.5">
       <p className="font-mono text-micro uppercase text-graphite">пруфы</p>
 
-      <ul className="mt-1 space-y-1.5">
+      <ul className="mt-1 space-y-2">
         {shown.map((proof) => (
-          <li key={proof.id} className="text-[0.8125rem] leading-snug">
-            <span className="font-mono text-micro uppercase text-graphite">
-              {proof.author?.firstName ?? '—'} ·{' '}
-              {new Date(proof.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-            </span>
-            {proof.note && <span className="ml-1.5 break-words">{proof.note}</span>}
-            {proof.url && (
-              <a
-                href={proof.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="ml-1.5 break-all font-mono text-[0.75rem] text-ochre underline underline-offset-2"
-              >
-                ссылка
-              </a>
-            )}
-          </li>
+          <ProofRow key={proof.id} goalId={goalId} proof={proof} />
         ))}
       </ul>
 
@@ -285,5 +387,45 @@ function Proofs({ versus }: { versus: VersusView }) {
         </button>
       )}
     </div>
+  );
+}
+
+function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
+  const { url, isPending, isError } = useProofImage(goalId, proof.id, proof.hasImage);
+
+  return (
+    <li className="text-[0.8125rem] leading-snug">
+      <span className="font-mono text-micro uppercase text-graphite">
+        {proof.author?.firstName ?? '—'} ·{' '}
+        {new Date(proof.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+      </span>
+      {proof.note && <span className="ml-1.5 break-words">{proof.note}</span>}
+      {proof.url && (
+        <a
+          href={proof.url}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="ml-1.5 break-all font-mono text-[0.75rem] text-ochre underline underline-offset-2"
+        >
+          ссылка
+        </a>
+      )}
+
+      {proof.hasImage && (
+        <div className="mt-1">
+          {url ? (
+            <img
+              src={url}
+              alt={`Пруф — ${proof.author?.firstName ?? 'участник'}`}
+              className="max-h-56 w-full border border-ink/20 object-contain"
+            />
+          ) : (
+            <div className="flex h-16 items-center justify-center border border-dashed border-ink/25 font-mono text-micro uppercase text-graphite">
+              {isError ? 'фото не открылось' : isPending ? 'загружаю фото…' : ''}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

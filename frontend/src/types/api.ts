@@ -290,6 +290,8 @@ export interface GoalProof {
   date: string;
   note: string | null;
   url: string | null;
+  /** The bytes live in a private store; fetch them through the goal's route. */
+  hasImage: boolean;
   author: { id: string; firstName: string; avatarUrl: string | null } | null;
 }
 

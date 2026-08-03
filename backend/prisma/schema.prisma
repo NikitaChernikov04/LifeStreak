@@ -413,6 +413,11 @@ model GroupGoalCheckin {
   // that the person who knows whether you are lying is reading it.
   proofNote String?
   proofUrl  String?
+  // Pathname inside the private blob store, never a URL. The store is private,
+  // so there is no address anybody could open without going back through us —
+  // which is what makes "only the people in this goal" a check rather than a
+  // hope that the link never leaks.
+  proofImage String?
 
   createdAt DateTime @default(now())
 

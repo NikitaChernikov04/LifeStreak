@@ -300,6 +300,23 @@ export function useCompleteGoal() {
   });
 }
 
+/**
+ * A photo for today's mark. Sent separately from the mark itself so that
+ * tapping "done" never waits on an upload — see the service comment.
+ */
+export function useAttachProof() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ goalId, blob, filename }: { goalId: string; blob: Blob; filename: string }) => {
+      const form = new FormData();
+      form.append('image', blob, filename);
+      // No Content-Type here on purpose: axios writes the multipart boundary.
+      return api.post<unknown, GroupGoal>(`/social/goals/${goalId}/proof`, form);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SOCIAL }),
+  });
+}
+
 export function useRescueGoal() {
   const queryClient = useQueryClient();
   return useMutation({

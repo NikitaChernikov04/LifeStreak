@@ -1,5 +1,22 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { MAX_PROOF_BYTES, PROOF_MIME_TYPES } from './proof-storage.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { SocialService } from './social.service';
 import { FeedService } from './feed.service';
@@ -150,6 +167,46 @@ export class SocialController {
   @Post('goals/:id/complete')
   completeGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
     return this.goals.complete(userId, goalId);
+  }
+
+  /**
+   * A photo for today's mark. The browser has already resized and re-encoded
+   * it, so the ceiling here is a backstop against a client that did not,
+   * rather than the size anything is expected to arrive at.
+   */
+  @Post('goals/:id/proof')
+  @UseInterceptors(FileInterceptor('image', { limits: { fileSize: MAX_PROOF_BYTES, files: 1 } }))
+  attachProof(
+    @CurrentUser('id') userId: string,
+    @Param('id') goalId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Файл не пришёл');
+    if (!PROOF_MIME_TYPES.includes(file.mimetype as (typeof PROOF_MIME_TYPES)[number])) {
+      throw new BadRequestException('Пруф должен быть картинкой');
+    }
+    return this.goals.attachProof(userId, goalId, file.buffer, file.mimetype);
+  }
+
+  /**
+   * The photo itself. Streamed through here rather than served from a URL:
+   * the blob store is private, so this handler and its membership check are
+   * the only way to the bytes.
+   */
+  @Get('goals/:id/proofs/:checkinId/image')
+  async proofImage(
+    @CurrentUser('id') userId: string,
+    @Param('id') goalId: string,
+    @Param('checkinId') checkinId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { stream, contentType } = await this.goals.readProof(userId, goalId, checkinId);
+    res.set({
+      'Content-Type': contentType,
+      // Private to one person's browser, and only for as long as one sitting.
+      'Cache-Control': 'private, max-age=300',
+    });
+    return new StreamableFile(stream);
   }
 
   @Get('users/:id')

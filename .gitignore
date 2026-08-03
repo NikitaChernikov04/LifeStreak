@@ -24,3 +24,5 @@ backend/prisma/*.db-journal
 # CLI) would otherwise hide them from new clones.
 !.env.example
 !**/.env.example
+
+.env*

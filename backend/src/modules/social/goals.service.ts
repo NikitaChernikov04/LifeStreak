@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { HeartsService } from '../hearts/hearts.service';
 import { UsersService } from '../users/users.service';
 import { SocialService } from './social.service';
+import { ProofStorageService } from './proof-storage.service';
 import { CheckinGoalDto, CreateGoalDto } from './dto/social.dto';
 import { GoalMode } from '../../common/enums';
 import { ONE_DAY_MS, daysBetween, toUtcDate, todayUtc } from '../../common/utils/date.util';
@@ -49,6 +50,7 @@ export class GoalsService {
     private readonly hearts: HeartsService,
     private readonly users: UsersService,
     private readonly social: SocialService,
+    private readonly storage: ProofStorageService,
   ) {}
 
   /**
@@ -326,6 +328,77 @@ export class GoalsService {
     }
 
     return this.present(goalId, userId);
+  }
+
+  /**
+   * Attaches a photo to today's mark.
+   *
+   * Separate from the checkin on purpose. Marking the day has to stay one
+   * instant tap, and a photo takes a file picker, a resize and an upload —
+   * bolting that onto the mark would make the fast path wait for the slow
+   * one. It also means a proof can be added after the fact, which is what
+   * people actually do.
+   */
+  async attachProof(userId: string, goalId: string, file: Buffer, mimeType: string) {
+    const goal = await this.prisma.groupGoal.findUnique({ where: { id: goalId } });
+    if (!goal) throw new NotFoundException('Цель не найдена');
+    if (goal.status !== 'ACTIVE') throw new BadRequestException('Эта цель уже закрыта');
+
+    const member = await this.memberOrThrow(goalId, userId);
+    if (member.status !== 'JOINED') throw new BadRequestException('Сначала прими приглашение');
+
+    const today = todayUtc();
+    const mark = await this.prisma.groupGoalCheckin.findUnique({
+      where: { goalId_userId_date: { goalId, userId, date: today } },
+    });
+    if (!mark) throw new BadRequestException('Сначала отметь день — пруф прикладывается к нему');
+
+    const pathname = await this.storage.save(goalId, userId, file, mimeType);
+    await this.prisma.groupGoalCheckin.update({
+      where: { id: mark.id },
+      data: { proofImage: pathname },
+    });
+    // Replacing a photo should not leave the old one on the bill forever.
+    if (mark.proofImage) await this.storage.forget(mark.proofImage);
+
+    const who = await this.nameOf(userId);
+    const others = (await this.joinedMemberIds(goalId)).filter((id) => id !== userId);
+    for (const id of others) {
+      await this.notifications.create(
+        id,
+        'GROUP_GOAL_PROOF',
+        'Пруф в споре',
+        `${who} приложил фото к своему дню в «${goal.title}»`,
+        { goalId },
+      );
+    }
+
+    return this.present(goalId, userId);
+  }
+
+  /**
+   * The bytes of one proof photo, for somebody who is in the goal.
+   *
+   * This check is the only thing standing between a private photo and the
+   * internet, which is why the store is private and the pathname never leaves
+   * the database: there is no second way in to get wrong.
+   */
+  async readProof(userId: string, goalId: string, checkinId: string) {
+    const member = await this.prisma.groupGoalMember.findUnique({
+      where: { goalId_userId: { goalId, userId } },
+      select: { status: true },
+    });
+    if (member?.status !== 'JOINED') throw new ForbiddenException('Пруфы видят только участники');
+
+    const mark = await this.prisma.groupGoalCheckin.findFirst({
+      where: { id: checkinId, goalId },
+      select: { proofImage: true },
+    });
+    if (!mark?.proofImage) throw new NotFoundException('Пруфа нет');
+
+    const blob = await this.storage.read(mark.proofImage);
+    if (!blob) throw new NotFoundException('Пруф не читается');
+    return blob;
   }
 
   // ── mechanics ───────────────────────────────────────────────
@@ -626,10 +699,24 @@ export class GoalsService {
    */
   private async proofs(goalId: string, members: Entrant[]) {
     const rows = await this.prisma.groupGoalCheckin.findMany({
-      where: { goalId, OR: [{ proofNote: { not: null } }, { proofUrl: { not: null } }] },
+      where: {
+        goalId,
+        OR: [
+          { proofNote: { not: null } },
+          { proofUrl: { not: null } },
+          { proofImage: { not: null } },
+        ],
+      },
       orderBy: { date: 'desc' },
       take: PROOF_FEED_SIZE,
-      select: { id: true, userId: true, date: true, proofNote: true, proofUrl: true },
+      select: {
+        id: true,
+        userId: true,
+        date: true,
+        proofNote: true,
+        proofUrl: true,
+        proofImage: true,
+      },
     });
 
     const byId = new Map(members.map((m) => [m.userId, m.user]));
@@ -638,6 +725,9 @@ export class GoalsService {
       date: r.date,
       note: r.proofNote,
       url: r.proofUrl,
+      // The pathname itself stays here. The client is told a photo exists and
+      // has to come back through the membership check to see it.
+      hasImage: Boolean(r.proofImage),
       author: byId.get(r.userId) ?? null,
     }));
   }
