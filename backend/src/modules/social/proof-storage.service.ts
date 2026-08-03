@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { del, get, put } from '@vercel/blob';
 import { Readable } from 'node:stream';
@@ -70,7 +75,16 @@ export class ProofStorageService {
     const token = this.token;
     if (!token) return null;
 
-    const blob = await get(pathname, { access: 'private', token });
+    let blob: Awaited<ReturnType<typeof get>>;
+    try {
+      blob = await get(pathname, { access: 'private', token });
+    } catch (error) {
+      // The store not answering is a passing condition, not a missing photo,
+      // and the difference decides whether the client is right to try again.
+      this.logger.warn(`Хранилище не ответило по ${pathname}: ${String(error)}`);
+      throw new ServiceUnavailableException('Хранилище не ответило, попробуй ещё раз');
+    }
+
     if (!blob || blob.statusCode !== 200) return null;
 
     return {

@@ -43,6 +43,16 @@ export function formatDayMark(iso: string): string {
   });
 }
 
+/** The same day, spelled out for a heading: «3 августа». Also UTC, and for the
+ *  same reason — see {@link formatDayMark}. */
+export function formatDayLong(iso: string): string {
+  return new Date(iso).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
+}
+
 export function pluralizeDays(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;

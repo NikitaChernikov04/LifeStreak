@@ -6,7 +6,8 @@ import { HeartsService } from '../hearts/hearts.service';
 import { UsersService } from '../users/users.service';
 import { SocialService } from './social.service';
 import { ProofStorageService } from './proof-storage.service';
-import { CheckinGoalDto, CreateGoalDto } from './dto/social.dto';
+import { CheckinGoalDto, CreateGoalDto, ProofsQueryDto } from './dto/social.dto';
+import { paginate } from '../../common/dto/pagination-query.dto';
 import { GoalMode } from '../../common/enums';
 import { ONE_DAY_MS, daysBetween, toUtcDate, todayUtc } from '../../common/utils/date.util';
 
@@ -399,6 +400,118 @@ export class GoalsService {
     const blob = await this.storage.read(mark.proofImage);
     if (!blob) throw new NotFoundException('Пруф не читается');
     return blob;
+  }
+
+  /**
+   * Every proof ever attached to this goal, newest first.
+   *
+   * The card carries only the last handful, which is the right amount for
+   * "what happened lately" and useless for looking something up. A hundred-day
+   * bet between two people who post daily leaves two hundred entries behind,
+   * and they are the record of the whole thing.
+   *
+   * Each one is stamped with the sprint it fell in, because that is the unit
+   * the bet is actually scored in — a date alone does not tell you which part
+   * of the story you are reading.
+   */
+  async listProofs(userId: string, goalId: string, query: ProofsQueryDto) {
+    const goal = await this.proofsAccessOrThrow(userId, goalId);
+
+    const where = {
+      ...this.proofFilter(goalId),
+      ...(query.date ? { date: toUtcDate(new Date(query.date)) } : {}),
+    };
+
+    const [rows, total, members] = await Promise.all([
+      this.prisma.groupGoalCheckin.findMany({
+        where,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        skip: query.skip,
+        take: query.limit,
+        select: {
+          id: true,
+          userId: true,
+          date: true,
+          proofNote: true,
+          proofUrl: true,
+          proofImage: true,
+        },
+      }),
+      this.prisma.groupGoalCheckin.count({ where }),
+      this.entrants(goalId),
+    ]);
+
+    const byId = new Map(members.map((m) => [m.userId, m.user]));
+
+    return paginate(
+      rows.map((r) => ({
+        id: r.id,
+        date: r.date,
+        note: r.proofNote,
+        url: r.proofUrl,
+        hasImage: Boolean(r.proofImage),
+        author: byId.get(r.userId) ?? null,
+        sprint: this.sprintOf(goal, r.date),
+      })),
+      total,
+      query,
+    );
+  }
+
+  /**
+   * The days this goal has anything on file for, newest first.
+   *
+   * Separate from the entries because the history is browsed a day at a time:
+   * this is the list somebody picks from, and pulling every proof just to
+   * work out which dates exist would be paying for the whole record to draw
+   * a menu.
+   */
+  async listProofDays(userId: string, goalId: string) {
+    const goal = await this.proofsAccessOrThrow(userId, goalId);
+
+    const rows = await this.prisma.groupGoalCheckin.groupBy({
+      by: ['date'],
+      where: this.proofFilter(goalId),
+      _count: { _all: true },
+      orderBy: { date: 'desc' },
+    });
+
+    return rows.map((row) => ({
+      date: row.date,
+      count: row._count._all,
+      sprint: this.sprintOf(goal, row.date),
+    }));
+  }
+
+  /** Which sprint a date fell in, 1-based. Null on a goal that has no sprints. */
+  private sprintOf(goal: GoalRow, date: Date): number | null {
+    if (goal.mode !== 'VERSUS' || !goal.startDate) return null;
+    return Math.floor(daysBetween(goal.startDate, date) / goal.sprintDays) + 1;
+  }
+
+  /** A checkin counts as a proof if it carries any of the three. */
+  private proofFilter(goalId: string) {
+    return {
+      goalId,
+      OR: [
+        { proofNote: { not: null } },
+        { proofUrl: { not: null } },
+        { proofImage: { not: null } },
+      ],
+    };
+  }
+
+  private async proofsAccessOrThrow(userId: string, goalId: string): Promise<GoalRow> {
+    const goal = await this.prisma.groupGoal.findUnique({ where: { id: goalId } });
+    if (!goal) throw new NotFoundException('Цель не найдена');
+
+    const member = await this.prisma.groupGoalMember.findUnique({
+      where: { goalId_userId: { goalId, userId } },
+      select: { status: true },
+    });
+    if (member?.status !== 'JOINED') throw new ForbiddenException('Пруфы видят только участники');
+
+    return goal;
   }
 
   // ── mechanics ───────────────────────────────────────────────

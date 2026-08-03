@@ -8,6 +8,7 @@ import {
   useLeaveGoal,
   useRescueGoal,
 } from '@/hooks/useSocial';
+import { RefreshButton } from '@/components/goals/RefreshButton';
 import { pluralizeDays } from '@/lib/streak';
 import { cn } from '@/lib/utils';
 import type { GroupGoal } from '@/types/api';
@@ -48,9 +49,14 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
-            {goal.title}
-          </h3>
+          {/* The refresh sits with the title because that is the thing being
+              refreshed — whether the others have closed their day. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
+              {goal.title}
+            </h3>
+            <RefreshButton />
+          </div>
 
           {done ? (
             <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Выполнена</span>

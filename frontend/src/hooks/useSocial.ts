@@ -7,6 +7,8 @@ import type {
   FriendRequest,
   FriendState,
   GoalMode,
+  GoalProofEntry,
+  ProofDay,
   GroupGoal,
   LeaderboardRow,
   Paginated,
@@ -297,6 +299,33 @@ export function useCompleteGoal() {
       });
       pushCelebration({ type: 'heart', amount: 1 });
     },
+  });
+}
+
+/**
+ * The days a goal has proofs on. Loaded on its own so the history's day
+ * picker does not have to drag the whole record along to draw a menu.
+ */
+export function useProofDays(goalId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...SOCIAL, 'proof-days', goalId],
+    enabled,
+    queryFn: () => api.get<unknown, ProofDay[]>(`/social/goals/${goalId}/proof-days`),
+  });
+}
+
+/**
+ * One day's proofs. The card carries only the newest handful, which is right
+ * for "what happened lately" and no use at all for looking something up.
+ */
+export function useGoalProofs(goalId: string, date: string | null) {
+  return useQuery({
+    queryKey: [...SOCIAL, 'proofs', goalId, date],
+    enabled: Boolean(date),
+    queryFn: () =>
+      api.get<unknown, Paginated<GoalProofEntry>>(`/social/goals/${goalId}/proofs`, {
+        params: { date, limit: 100 },
+      }),
   });
 }
 

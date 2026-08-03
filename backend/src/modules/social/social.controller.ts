@@ -24,6 +24,7 @@ import { GoalsService } from './goals.service';
 import {
   CheckinGoalDto,
   CreateGoalDto,
+  ProofsQueryDto,
   ReactDto,
   SearchUsersDto,
   SetSharingDto,
@@ -186,6 +187,22 @@ export class SocialController {
       throw new BadRequestException('Пруф должен быть картинкой');
     }
     return this.goals.attachProof(userId, goalId, file.buffer, file.mimetype);
+  }
+
+  /** The days this goal has proofs on — the list the history is browsed by. */
+  @Get('goals/:id/proof-days')
+  listProofDays(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.listProofDays(userId, goalId);
+  }
+
+  /** Proofs on this goal, optionally narrowed to one day. Members only. */
+  @Get('goals/:id/proofs')
+  listProofs(
+    @CurrentUser('id') userId: string,
+    @Param('id') goalId: string,
+    @Query() query: ProofsQueryDto,
+  ) {
+    return this.goals.listProofs(userId, goalId, query);
   }
 
   /**

@@ -6,6 +6,7 @@ import {
   IsHexColor,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUrl,
@@ -14,6 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { GOAL_MODES, GoalMode, REACTION_KEYS, ReactionKey } from '../../../common/enums';
+import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 
 export class UpdatePrivacyDto {
   @IsOptional()
@@ -89,6 +91,13 @@ export class CreateGoalDto {
   @ArrayMaxSize(10)
   @IsString({ each: true })
   memberIds: string[];
+}
+
+export class ProofsQueryDto extends PaginationQueryDto {
+  /** One UTC day, when the history is being read a day at a time. */
+  @IsOptional()
+  @IsISO8601()
+  date?: string;
 }
 
 /**

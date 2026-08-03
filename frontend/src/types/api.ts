@@ -295,6 +295,19 @@ export interface GoalProof {
   author: { id: string; firstName: string; avatarUrl: string | null } | null;
 }
 
+/** A proof in the full record, which also says which sprint it fell in. */
+export interface GoalProofEntry extends GoalProof {
+  /** Null on a joint goal — it has no sprints to belong to. */
+  sprint: number | null;
+}
+
+/** One entry in the history's day picker. */
+export interface ProofDay {
+  date: string;
+  count: number;
+  sprint: number | null;
+}
+
 export interface VersusView {
   sprintDays: number;
   sprintCount: number;

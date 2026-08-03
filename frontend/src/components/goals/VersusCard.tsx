@@ -8,8 +8,9 @@ import {
   useJoinGoal,
   useLeaveGoal,
 } from '@/hooks/useSocial';
-import { useProofImage } from '@/hooks/useProofImage';
-import { ProofViewer } from '@/components/goals/ProofViewer';
+import { ProofPhoto } from '@/components/goals/ProofPhoto';
+import { ProofHistory } from '@/components/goals/ProofHistory';
+import { RefreshButton } from '@/components/goals/RefreshButton';
 import { compressImage, formatBytes, type CompressedImage } from '@/lib/image';
 import { formatDayMark } from '@/lib/streak';
 import { cn } from '@/lib/utils';
@@ -117,9 +118,14 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
-            {goal.title}
-          </h3>
+          {/* The refresh sits with the title because that is the thing being
+              refreshed — the other side's marks and proofs. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
+              {goal.title}
+            </h3>
+            <RefreshButton />
+          </div>
 
           {done ? (
             <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Спор закрыт</span>
@@ -169,7 +175,9 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
           </p>
         )}
 
-        {!invited && versus.proofs.length > 0 && <Proofs goalId={goal.id} versus={versus} />}
+        {!invited && goal.myStatus === 'JOINED' && (
+          <Proofs goalId={goal.id} title={goal.title} versus={versus} />
+        )}
 
         {/* The evidence field, opened by hand. It is never a gate: the button
             above marks the day whether or not anything is filled in here. */}
@@ -366,36 +374,62 @@ function Standings({ versus }: { versus: VersusView }) {
 }
 
 /** Evidence, newest first. Nobody approves it — it is here to be seen. */
-function Proofs({ goalId, versus }: { goalId: string; versus: VersusView }) {
+function Proofs({
+  goalId,
+  title,
+  versus,
+}: {
+  goalId: string;
+  title: string;
+  versus: VersusView;
+}) {
   const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState(false);
   const shown = open ? versus.proofs : versus.proofs.slice(0, 2);
 
   return (
     <div className="mt-2.5">
-      <p className="font-mono text-micro uppercase text-graphite">пруфы</p>
-
-      <ul className="mt-1 space-y-2">
-        {shown.map((proof) => (
-          <ProofRow key={proof.id} goalId={goalId} proof={proof} />
-        ))}
-      </ul>
-
-      {versus.proofs.length > 2 && (
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="mt-1 font-mono text-micro uppercase text-graphite underline underline-offset-2 transition-colors hover:text-ink"
-        >
-          {open ? 'свернуть' : `ещё ${versus.proofs.length - 2}`}
-        </button>
+      {/* Nothing attached yet still gets the way in: the record is empty, not
+          absent, and the button is where somebody would look for it. */}
+      {versus.proofs.length > 0 && (
+        <>
+          <p className="font-mono text-micro uppercase text-graphite">пруфы</p>
+          <ul className="mt-1 space-y-2">
+            {shown.map((proof) => (
+              <ProofRow key={proof.id} goalId={goalId} proof={proof} />
+            ))}
+          </ul>
+        </>
       )}
+
+      <div className="mt-1 flex flex-wrap items-center gap-3 font-mono text-micro uppercase">
+        {versus.proofs.length > 2 && (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="text-graphite underline underline-offset-2 transition-colors hover:text-ink"
+          >
+            {open ? 'свернуть' : `ещё ${versus.proofs.length - 2}`}
+          </button>
+        )}
+
+        {/* The card only ever carries the newest few. Everything before that
+            lives behind here. */}
+        <button
+          onClick={() => setHistory(true)}
+          className="text-graphite underline underline-offset-2 transition-colors hover:text-ink"
+        >
+          прошлые дни
+        </button>
+      </div>
+
+      <ProofHistory goalId={goalId} title={title} open={history} onOpenChange={setHistory} />
     </div>
   );
 }
 
 function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
-  const { url, isPending, isError } = useProofImage(goalId, proof.id, proof.hasImage);
-  const [viewing, setViewing] = useState(false);
-  const caption = `${proof.author?.firstName ?? 'участник'} · ${formatDayMark(proof.date)}`;
+  const author = proof.author?.firstName ?? 'участник';
+  const caption = `${author} · ${formatDayMark(proof.date)}`;
 
   return (
     <li className="text-[0.8125rem] leading-snug">
@@ -416,28 +450,7 @@ function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
 
       {proof.hasImage && (
         <div className="mt-1">
-          {url ? (
-            <>
-              {/* A card-sized thumbnail cannot show a commit hash or a receipt,
-                  so the small one is only ever the way into the big one. */}
-              <button
-                onClick={() => setViewing(true)}
-                aria-label={`Открыть пруф крупнее — ${caption}`}
-                className="block w-full cursor-zoom-in"
-              >
-                <img
-                  src={url}
-                  alt={`Пруф — ${proof.author?.firstName ?? 'участник'}`}
-                  className="max-h-56 w-full border border-ink/20 object-contain"
-                />
-              </button>
-              <ProofViewer src={url} caption={caption} open={viewing} onOpenChange={setViewing} />
-            </>
-          ) : (
-            <div className="flex h-16 items-center justify-center border border-dashed border-ink/25 font-mono text-micro uppercase text-graphite">
-              {isError ? 'фото не открылось' : isPending ? 'загружаю фото…' : ''}
-            </div>
-          )}
+          <ProofPhoto goalId={goalId} checkinId={proof.id} caption={caption} author={author} />
         </div>
       )}
     </li>

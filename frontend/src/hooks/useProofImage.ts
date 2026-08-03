@@ -12,14 +12,18 @@ import { api } from '@/lib/api';
  * request and are handed to the tag as an object URL.
  */
 export function useProofImage(goalId: string, checkinId: string, enabled: boolean) {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, refetch, isFetching } = useQuery({
     queryKey: ['proof-image', goalId, checkinId],
     enabled,
     // The photo for a given day never changes; refetching it would be paying
     // to move the same bytes twice.
     staleTime: Infinity,
     gcTime: 30 * 60 * 1000,
-    retry: false,
+    // The bytes come from storage over the network, and that hop does fail on
+    // a bad connection. Without a retry one blink leaves the photo broken for
+    // as long as the card stays on screen.
+    retry: 2,
+    retryDelay: (attempt) => 600 * 2 ** attempt,
     queryFn: () =>
       api.get<unknown, Blob>(`/social/goals/${goalId}/proofs/${checkinId}/image`, {
         responseType: 'blob',
@@ -35,5 +39,5 @@ export function useProofImage(goalId: string, checkinId: string, enabled: boolea
     return () => URL.revokeObjectURL(objectUrl);
   }, [data]);
 
-  return { url, isPending: enabled && isPending, isError };
+  return { url, isPending: enabled && isPending, isError, isFetching, retry: refetch };
 }
