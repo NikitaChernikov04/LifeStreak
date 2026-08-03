@@ -168,6 +168,19 @@ export interface NotificationSettings {
   botLink: string | null;
 }
 
+/** A Telegram group the bot reports into, and where this person is counted. */
+export interface Circle {
+  id: string;
+  title: string;
+  memberCount: number;
+}
+
+export interface CirclesResponse {
+  /** Opens Telegram's own chat picker. Null when the bot has no @username yet. */
+  addToGroupLink: string | null;
+  circles: Circle[];
+}
+
 export interface PrivacySettings {
   isDiscoverable: boolean;
   friends: number;

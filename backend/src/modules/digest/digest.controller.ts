@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
 import { DigestService } from './digest.service';
+import { ChatCircleService } from '../telegram/chat-circle.service';
 
 /**
  * Called by the scheduler, not by the app. There is no in-process cron here on
@@ -16,6 +17,7 @@ import { DigestService } from './digest.service';
 export class DigestController {
   constructor(
     private readonly digest: DigestService,
+    private readonly circles: ChatCircleService,
     private readonly config: ConfigService,
   ) {}
 
@@ -43,6 +45,10 @@ export class DigestController {
     const presented = authorization?.replace(/^Bearer\s+/i, '') ?? header;
     if (!expected || presented !== expected) throw new ForbiddenException();
 
-    return this.digest.run();
+    // Sequential, not Promise.all: both write to the same rows for the same
+    // people, and one evening's messages are not worth a write conflict.
+    const personal = await this.digest.run();
+    const circles = await this.circles.runDigest();
+    return { ...personal, circles };
   }
 }

@@ -66,6 +66,7 @@ model User {
   goalsOwned          GroupGoal[]        @relation("GoalOwner")
   goalMemberships     GroupGoalMember[]
   goalCheckins        GroupGoalCheckin[]
+  circleMemberships   ChatCircleMember[]
 
   @@index([telegramId])
   @@map("users")
@@ -385,6 +386,62 @@ model GroupGoalCheckin {
   @@unique([goalId, userId, date])
   @@index([goalId, date])
   @@map("group_goal_checkins")
+}
+
+// ──────────────────────────────────────────────────────────────
+// CHAT CIRCLES
+// ──────────────────────────────────────────────────────────────
+// A Telegram group the bot has been added to, and the people in it who asked
+// to be counted. Every other tracker has to build the circle of friends before
+// it can use one; a group chat is a circle that already exists, with the
+// membership, the names and the habit of reading it every day already in place.
+//
+// What goes out there is deliberately thin: how many of each member's streaks
+// are marked today, and nothing about which ones. Per-streak sharing (see
+// Streak.isShared) is consent to be read by *friends*, and a group chat is not
+// the same audience — reusing that flag here would leak one into the other.
+// Joining the circle is the consent, and it is withdrawn with /leave.
+
+model ChatCircle {
+  id String @id @default(cuid())
+
+  // Telegram's chat id. Negative for groups, which is also why it can never
+  // collide with the positive user ids stored on User.telegramId.
+  telegramChatId String  @unique
+  title          String?
+
+  // Removal from the chat is not deletion: the same group can add the bot back
+  // and everyone who joined is still there, which is kinder than making four
+  // people re-register because someone tidied up the member list.
+  isActive Boolean @default(true)
+
+  // Last UTC date an evening line went out. One per chat per day, whatever the
+  // scheduler does — a group tolerates far less repetition than a private chat.
+  lastDigestDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members ChatCircleMember[]
+
+  @@index([isActive])
+  @@map("chat_circles")
+}
+
+model ChatCircleMember {
+  id String @id @default(cuid())
+
+  circleId String
+  circle   ChatCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([circleId, userId])
+  @@index([userId])
+  @@map("chat_circle_members")
 }
 
 // ──────────────────────────────────────────────────────────────

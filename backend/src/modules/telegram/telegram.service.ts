@@ -42,6 +42,19 @@ export class TelegramService {
    * and a message that failed to leave must not undo a check-in.
    */
   async sendMessage(telegramId: string, text: string, options: SendOptions = {}): Promise<SendResult> {
+    const result = await this.sendToChat(telegramId, text, options);
+    if (result === 'BLOCKED') await this.markBlocked(telegramId);
+    return result;
+  }
+
+  /**
+   * The same send without the conclusion about a person. A group chat can
+   * refuse us too — the bot was removed, the group was upgraded to a
+   * supergroup and changed id — but that says nothing about anybody's private
+   * chat, and writing it to a user row would silence someone who never did
+   * anything. Callers that own a chat deal with BLOCKED themselves.
+   */
+  async sendToChat(chatId: string, text: string, options: SendOptions = {}): Promise<SendResult> {
     const token = this.config.get<string>('telegram.botToken');
     if (!token) return 'SKIPPED';
 
@@ -49,7 +62,7 @@ export class TelegramService {
 
     try {
       const response = await this.call(token, 'sendMessage', {
-        chat_id: telegramId,
+        chat_id: chatId,
         text,
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
@@ -63,15 +76,12 @@ export class TelegramService {
       // means the chat never existed — the same situation, different wording.
       const unreachable =
         body.error_code === 403 || (body.description ?? '').includes('chat not found');
-      if (unreachable) {
-        await this.markBlocked(telegramId);
-        return 'BLOCKED';
-      }
+      if (unreachable) return 'BLOCKED';
 
-      this.logger.warn(`sendMessage ${telegramId}: ${body.error_code} ${body.description}`);
+      this.logger.warn(`sendMessage ${chatId}: ${body.error_code} ${body.description}`);
       return 'FAILED';
     } catch (error) {
-      this.logger.warn(`sendMessage ${telegramId} failed: ${String(error)}`);
+      this.logger.warn(`sendMessage ${chatId} failed: ${String(error)}`);
       return 'FAILED';
     }
   }
@@ -96,6 +106,16 @@ export class TelegramService {
   async botLink(): Promise<string | null> {
     const username = await this.resolveBotUsername();
     return username ? `https://t.me/${username}` : null;
+  }
+
+  /**
+   * Opens Telegram's own "add to group" picker. Deliberately not a deep link
+   * we build ourselves: which chats a person may add a bot to is Telegram's
+   * question to answer, and it already knows the list.
+   */
+  async addToGroupLink(): Promise<string | null> {
+    const username = await this.resolveBotUsername();
+    return username ? `https://t.me/${username}?startgroup=true` : null;
   }
 
   async resolveBotUsername(): Promise<string | null> {
