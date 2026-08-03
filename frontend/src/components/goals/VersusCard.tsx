@@ -10,6 +10,7 @@ import {
 } from '@/hooks/useSocial';
 import { useProofImage } from '@/hooks/useProofImage';
 import { compressImage, formatBytes, type CompressedImage } from '@/lib/image';
+import { formatDayMark } from '@/lib/streak';
 import { cn } from '@/lib/utils';
 import type { GoalProof, GroupGoal, VersusView } from '@/types/api';
 
@@ -396,8 +397,7 @@ function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
   return (
     <li className="text-[0.8125rem] leading-snug">
       <span className="font-mono text-micro uppercase text-graphite">
-        {proof.author?.firstName ?? '—'} ·{' '}
-        {new Date(proof.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+        {proof.author?.firstName ?? '—'} · {formatDayMark(proof.date)}
       </span>
       {proof.note && <span className="ml-1.5 break-words">{proof.note}</span>}
       {proof.url && (

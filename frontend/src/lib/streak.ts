@@ -27,6 +27,22 @@ export function progressToGoal(streak: Streak): number {
   return Math.min(100, (streak.currentCount / streak.nextGoal) * 100);
 }
 
+/**
+ * A day the backend counted, written out.
+ *
+ * These dates are UTC midnight, not moments — the whole app decides what "a
+ * day" is in UTC. Rendering one in local time labels it a day early for
+ * everybody west of UTC: a proof attached on the 4th reads "3 авг." in New
+ * York. Formatting in UTC is what makes the label agree with the count.
+ */
+export function formatDayMark(iso: string): string {
+  return new Date(iso).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
 export function pluralizeDays(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
