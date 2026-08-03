@@ -206,6 +206,49 @@ export class GoalsService {
     return this.present(goalId, userId);
   }
 
+  /**
+   * Declares the goal done ahead of its day count.
+   *
+   * Any joined member can, not just the owner: a goal is a claim two people
+   * made to each other, and whoever sees it come true is in a position to say
+   * so. Requiring the owner's word would leave the person who actually
+   * finished it waiting for permission — and there is nothing here worth
+   * building an approval flow around.
+   *
+   * This is deliberately different from leaving. Leaving abandons the goal;
+   * this closes it as kept, and everyone gets the heart for it.
+   */
+  async complete(userId: string, goalId: string) {
+    const goal = await this.prisma.groupGoal.findUnique({ where: { id: goalId } });
+    if (!goal) throw new NotFoundException('Цель не найдена');
+    if (goal.status !== 'ACTIVE') throw new BadRequestException('Эта цель уже закрыта');
+
+    const member = await this.memberOrThrow(goalId, userId);
+    if (member.status !== 'JOINED') throw new BadRequestException('Сначала прими приглашение');
+
+    await this.prisma.groupGoal.update({
+      where: { id: goalId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    const who = await this.nameOf(userId);
+    const members = await this.joinedMemberIds(goalId);
+    for (const memberId of members) {
+      await this.hearts.grant(memberId, 'GROUP_GOAL_COMPLETED');
+      await this.notifications.create(
+        memberId,
+        'GROUP_GOAL_COMPLETED',
+        'Цель выполнена 🎯',
+        memberId === userId
+          ? `«${goal.title}» закрыта. Держали вместе.`
+          : `${who} отметил «${goal.title}» выполненной. Держали вместе.`,
+        { goalId },
+      );
+    }
+
+    return this.present(goalId, userId);
+  }
+
   // ── mechanics ───────────────────────────────────────────────
 
   /**
@@ -246,7 +289,7 @@ export class GoalsService {
       await this.notifications.create(
         memberId,
         reachedTarget ? 'GROUP_GOAL_COMPLETED' : 'GROUP_GOAL_DAY',
-        reachedTarget ? 'Цель взята! 🎯' : 'День засчитан группе',
+        reachedTarget ? 'Цель выполнена 🎯' : 'День засчитан группе',
         reachedTarget
           ? `«${goal.title}» — ${goal.targetDays} дней вместе. Держались все.`
           : `Все отметились: «${goal.title}» — день ${nextCount} из ${goal.targetDays}`,
@@ -279,18 +322,35 @@ export class GoalsService {
       data: { currentCount: 0 },
     });
 
-    const members = await this.joinedMemberIds(goalId);
-    await Promise.all(
-      members.map((id) =>
-        this.notifications.create(
-          id,
-          'GROUP_GOAL_BROKEN',
-          'Общая цель сорвалась',
-          `«${goal.title}» обнулилась: день закрыли не все. Счёт начинается заново.`,
-          { goalId },
-        ),
-      ),
+    // The day the chain died is the one right after the last credited day.
+    // Whoever marked it did their part and lost the count to somebody else's
+    // silence — that part comes back as a heart. No penalty for the one who
+    // missed: the zeroed count is already the consequence, and a second one
+    // payable in hearts would just give them a way to settle up and stop
+    // feeling it.
+    const brokenDay = new Date(goal.lastCountedDate.getTime() + ONE_DAY_MS);
+    const stood = new Set(
+      (
+        await this.prisma.groupGoalCheckin.findMany({
+          where: { goalId, date: brokenDay },
+          select: { userId: true },
+        })
+      ).map((c) => c.userId),
     );
+
+    const members = await this.joinedMemberIds(goalId);
+    for (const id of members) {
+      if (stood.has(id)) await this.hearts.grant(id, 'GROUP_GOAL_HELD');
+      await this.notifications.create(
+        id,
+        'GROUP_GOAL_BROKEN',
+        'Общая цель сорвалась',
+        stood.has(id)
+          ? `«${goal.title}» обнулилась: день закрыли не все. Свой ты отметил — держи сердце.`
+          : `«${goal.title}» обнулилась: день закрыли не все. Счёт начинается заново.`,
+        { goalId },
+      );
+    }
 
     return broken;
   }

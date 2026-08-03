@@ -36,6 +36,9 @@ export const HEART_REASONS = [
   'STREAK_RECOVERY_SPENT',
   'GROUP_GOAL_RESCUE_SPENT',
   'GROUP_GOAL_COMPLETED',
+  // Marked a group day that somebody else left open. The count is lost either
+  // way; this is the part of it that was actually earned coming back.
+  'GROUP_GOAL_HELD',
   'ACHIEVEMENT_BONUS',
 ] as const;
 export type HeartReason = (typeof HEART_REASONS)[number];

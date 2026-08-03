@@ -233,7 +233,7 @@ export function useCheckinGoal() {
           days: updated.currentCount,
           icon: updated.icon,
           title: updated.title,
-          note: 'Цель взята. Держались все',
+          note: 'Цель выполнена. Держались все',
         });
         pushCelebration({ type: 'heart', amount: 1 });
       } else if (GOAL_MILESTONES.includes(updated.currentCount)) {
@@ -245,6 +245,35 @@ export function useCheckinGoal() {
           note: 'Вместе, без пропусков',
         });
       }
+    },
+  });
+}
+
+/**
+ * Declaring the goal kept. Any member can — the backend decides that, not the
+ * card — and the finish is worth the same theatre as reaching the day count,
+ * because to the two people involved it is the same event.
+ */
+export function useCompleteGoal() {
+  const queryClient = useQueryClient();
+  const pushCelebration = useCelebrationStore((s) => s.push);
+
+  return useMutation({
+    mutationFn: (goalId: string) => api.post<unknown, GroupGoal>(`/social/goals/${goalId}/complete`),
+    onSuccess: (goal) => {
+      hapticNotification('success');
+      queryClient.invalidateQueries({ queryKey: SOCIAL });
+      queryClient.invalidateQueries({ queryKey: ['hearts'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+
+      pushCelebration({
+        type: 'milestone',
+        days: goal.currentCount,
+        icon: goal.icon,
+        title: goal.title,
+        note: 'Цель выполнена. Держали вместе',
+      });
+      pushCelebration({ type: 'heart', amount: 1 });
     },
   });
 }

@@ -65,6 +65,7 @@ export class HeartsService {
       STREAK_RECOVERY_SPENT: 'Потрачено на восстановление серии',
       GROUP_GOAL_RESCUE_SPENT: 'Потрачено, чтобы спасти общую цель',
       GROUP_GOAL_COMPLETED: 'За доведённую до конца общую цель',
+      GROUP_GOAL_HELD: 'За день, который ты закрыл, когда цель сорвалась',
       ACHIEVEMENT_BONUS: 'За достижение',
     };
     return labels[reason];

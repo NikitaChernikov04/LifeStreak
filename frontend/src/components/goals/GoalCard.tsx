@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { useCheckinGoal, useJoinGoal, useLeaveGoal, useRescueGoal } from '@/hooks/useSocial';
+import {
+  useCheckinGoal,
+  useCompleteGoal,
+  useJoinGoal,
+  useLeaveGoal,
+  useRescueGoal,
+} from '@/hooks/useSocial';
 import { pluralizeDays } from '@/lib/streak';
 import { cn } from '@/lib/utils';
 import type { GroupGoal } from '@/types/api';
@@ -12,11 +18,14 @@ import type { GroupGoal } from '@/types/api';
  * count, the target, the rescue — is subordinate to that.
  */
 export function GoalCard({ goal }: { goal: GroupGoal }) {
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // Both destructive-ish actions ask twice, and only one of them may be asking
+  // at a time — two live confirmations side by side is how you tap the wrong one.
+  const [confirming, setConfirming] = useState<'leave' | 'complete' | null>(null);
   const checkin = useCheckinGoal();
   const rescue = useRescueGoal();
   const join = useJoinGoal();
   const leave = useLeaveGoal();
+  const complete = useCompleteGoal();
 
   const invited = goal.myStatus === 'INVITED';
   const done = goal.status === 'COMPLETED';
@@ -39,18 +48,12 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
-              {goal.title}
-            </h3>
-            <p className="mt-0.5 font-mono text-micro uppercase text-graphite">
-              вместе · <span className="figure">{goal.currentCount}</span> из {goal.targetDays}{' '}
-              {pluralizeDays(goal.targetDays)}
-            </p>
-          </div>
+          <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
+            {goal.title}
+          </h3>
 
           {done ? (
-            <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Взята</span>
+            <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Выполнена</span>
           ) : invited ? (
             <Button
               size="sm"
@@ -61,7 +64,7 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
               Вступить
             </Button>
           ) : goal.markedToday ? (
-            <span className="chip mt-0.5 shrink-0">✓ Записано</span>
+            <span className="chip mt-0.5 shrink-0">✓ День отмечен</span>
           ) : (
             <Button
               size="sm"
@@ -69,10 +72,18 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
               disabled={checkin.isPending}
               onClick={() => checkin.mutate(goal)}
             >
-              Записать
+              Отметить день
             </Button>
           )}
         </div>
+
+        {/* Below the button rather than beside it: the count is a full line of
+            text, and sharing a row with a button leaves it wrapping three times
+            on a 320px screen. */}
+        <p className="mt-0.5 font-mono text-micro uppercase text-graphite">
+          держим вместе · <span className="figure">{goal.currentCount}</span> из {goal.targetDays}{' '}
+          {pluralizeDays(goal.targetDays)}
+        </p>
 
         {/* Progress towards the finish line, drawn as a measured scale. */}
         <div className="mt-3 h-2 w-full border border-ink/25">
@@ -128,23 +139,48 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
             </button>
           )}
 
-          {!done && (
+          {/* The finish, reachable from day one. A goal can come true before its
+              day count runs out, and until this existed the only way to close
+              one early was to abandon it — which is the opposite statement. */}
+          {!done && goal.myStatus === 'JOINED' && (
             <button
-              onClick={() => (confirmingLeave ? leave.mutate(goal.id) : setConfirmingLeave(true))}
-              onBlur={() => setConfirmingLeave(false)}
+              onClick={() =>
+                confirming === 'complete' ? complete.mutate(goal.id) : setConfirming('complete')
+              }
+              onBlur={() => setConfirming(null)}
+              disabled={complete.isPending}
               className={cn(
-                'uppercase transition-colors hover:text-ink',
-                confirmingLeave ? 'text-vermilion underline underline-offset-2' : 'text-graphite',
+                'uppercase transition-colors hover:text-ink disabled:opacity-50',
+                confirming === 'complete'
+                  ? 'text-ochre underline underline-offset-2'
+                  : 'text-graphite',
               )}
             >
-              {confirmingLeave
+              {confirming === 'complete' ? 'Точно выполнена?' : 'Цель выполнена'}
+            </button>
+          )}
+
+          {!done && (
+            <button
+              onClick={() =>
+                confirming === 'leave' ? leave.mutate(goal.id) : setConfirming('leave')
+              }
+              onBlur={() => setConfirming(null)}
+              className={cn(
+                'uppercase transition-colors hover:text-ink',
+                confirming === 'leave'
+                  ? 'text-vermilion underline underline-offset-2'
+                  : 'text-graphite',
+              )}
+            >
+              {confirming === 'leave'
                 ? goal.isOwner
-                  ? 'Закрыть для всех?'
+                  ? 'Бросить для всех?'
                   : 'Точно?'
                 : invited
                   ? 'Отказаться'
                   : goal.isOwner
-                    ? 'Закрыть цель'
+                    ? 'Бросить цель'
                     : 'Выйти'}
             </button>
           )}

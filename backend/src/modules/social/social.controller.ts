@@ -140,6 +140,12 @@ export class SocialController {
     return this.goals.rescue(userId, goalId);
   }
 
+  /** Declares the goal done. Any joined member may — see the service comment. */
+  @Post('goals/:id/complete')
+  completeGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
+    return this.goals.complete(userId, goalId);
+  }
+
   @Get('users/:id')
   profile(@CurrentUser('id') userId: string, @Param('id') targetId: string) {
     return this.social.getProfile(userId, targetId);
