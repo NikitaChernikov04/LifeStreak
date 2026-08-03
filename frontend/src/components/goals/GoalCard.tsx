@@ -70,7 +70,7 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
               size="sm"
               className="mt-0.5 shrink-0"
               disabled={checkin.isPending}
-              onClick={() => checkin.mutate(goal)}
+              onClick={() => checkin.mutate({ goal })}
             >
               Отметить день
             </Button>

@@ -308,14 +308,21 @@ model Friendship {
 // ──────────────────────────────────────────────────────────────
 // GROUP GOALS
 // ──────────────────────────────────────────────────────────────
-// A goal several friends hold together. The day counts for the group only
-// once every joined member has marked it, so `currentCount` is a property of
-// the group, not a sum of anyone's effort.
+// Something several friends do at once, in one of two shapes.
 //
-// State is derived from `lastCountedDate` rather than tracked by a scheduler:
-// with no cron in production, a goal that "should have broken" overnight must
-// still read as broken the next time anyone opens it. The service compares
-// that date with today on every read and persists the reset it finds.
+// TOGETHER — they hold it together. The day counts for the group only once
+// every joined member has marked it, so `currentCount` is a property of the
+// group, not a sum of anyone's effort. State is derived from
+// `lastCountedDate` rather than tracked by a scheduler: with no cron in
+// production, a goal that "should have broken" overnight must still read as
+// broken the next time anyone opens it.
+//
+// VERSUS — they compete. Everyone keeps their own days, and those days are
+// scored in fixed sprints rather than one running total. A total is
+// unwinnable once a gap opens, which makes the person behind a spectator for
+// the rest of the distance; a sprint restarts, so being four sprints down is
+// a thing you can still answer. Nothing here is credited to the group, so
+// `currentCount` and `lastCountedDate` stay untouched.
 //
 // status: "ACTIVE" | "COMPLETED" | "ABANDONED" — see GroupGoalStatus.
 
@@ -326,8 +333,24 @@ model GroupGoal {
   icon  String
   color String
 
+  /// "TOGETHER" | "VERSUS" — see GoalMode.
+  mode String @default("TOGETHER")
+
   targetDays   Int // the finish line: reaching it completes the goal
   currentCount Int @default(0)
+
+  // VERSUS only. The sprint length; the number of sprints is
+  // `targetDays / sprintDays`, which is why a competition's length is chosen
+  // as a count of sprints and can never leave a remainder.
+  sprintDays Int @default(5)
+  // UTC midnight the first sprint opened. A competition needs a fixed
+  // calendar — which days belong to which sprint has to be the same answer
+  // for both sides. TOGETHER has no such need and leaves this null.
+  startDate  DateTime?
+  // Index of the last sprint whose result has been announced, -1 before the
+  // first. Sprints are settled lazily on read like everything else here, and
+  // this is what keeps that from announcing the same sprint twice.
+  settledSprint Int @default(-1)
 
   status          String    @default("ACTIVE")
   // Last UTC date credited to the whole group. Null until the first full day.
@@ -380,6 +403,16 @@ model GroupGoalCheckin {
 
   date      DateTime // UTC midnight of the day it counts for
   usedHeart Boolean  @default(false) // closed a missed day rather than today
+
+  // Optional evidence for the day, readable only by the people in this goal.
+  //
+  // It is testimony, not a gate: nobody approves it, it changes no score, and
+  // a day without it counts exactly the same. Any approval flow would put a
+  // blocking step on the one action the whole product depends on being
+  // instant, and would still not stop a determined faker. What stops one is
+  // that the person who knows whether you are lying is reading it.
+  proofNote String?
+  proofUrl  String?
 
   createdAt DateTime @default(now())
 

@@ -1,14 +1,26 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { GroupGoal, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HeartsService } from '../hearts/hearts.service';
 import { UsersService } from '../users/users.service';
 import { SocialService } from './social.service';
-import { CreateGoalDto } from './dto/social.dto';
-import { ONE_DAY_MS, daysBetween, todayUtc } from '../../common/utils/date.util';
+import { CheckinGoalDto, CreateGoalDto } from './dto/social.dto';
+import { GoalMode } from '../../common/enums';
+import { ONE_DAY_MS, daysBetween, toUtcDate, todayUtc } from '../../common/utils/date.util';
 
 /** XP each member earns on a day the whole group closed. */
 const GROUP_DAY_XP = 25;
+
+/**
+ * XP for a day in a competition. Lower than the joint one on purpose: there
+ * the day is only credited once everybody delivered, which is the harder
+ * thing and the one worth paying more for.
+ */
+const VERSUS_DAY_XP = 15;
+
+/** The most recent evidence shown on a competition's card. */
+const PROOF_FEED_SIZE = 12;
 
 const MEMBER_CARD = {
   id: true,
@@ -18,6 +30,16 @@ const MEMBER_CARD = {
   avatarUrl: true,
   level: true,
 } as const;
+
+type GoalRow = GroupGoal;
+
+/** A member the sprint scoring can consider, with the date they came in on. */
+type Entrant = Prisma.GroupGoalMemberGetPayload<{
+  select: { userId: true; joinedAt: true; user: { select: typeof MEMBER_CARD } };
+}>;
+
+/** Just enough of a checkin to score sprints with. */
+type Mark = Prisma.GroupGoalCheckinGetPayload<{ select: { userId: true; date: true } }>;
 
 @Injectable()
 export class GoalsService {
@@ -68,12 +90,28 @@ export class GoalsService {
       }
     }
 
+    const mode: GoalMode = dto.mode ?? 'TOGETHER';
+    const versus = mode === 'VERSUS';
+
+    // A competition is measured in sprints, so its length is a product rather
+    // than a number somebody typed — that is what guarantees the last sprint
+    // is the same size as the first.
+    if (versus && (!dto.sprintDays || !dto.sprintCount)) {
+      throw new BadRequestException('У соревнования нужны длина спринта и их количество');
+    }
+    if (!versus && !dto.targetDays) {
+      throw new BadRequestException('Укажи, на сколько дней цель');
+    }
+    const targetDays = versus ? dto.sprintDays! * dto.sprintCount! : dto.targetDays!;
+
     const goal = await this.prisma.groupGoal.create({
       data: {
         title: dto.title,
         icon: dto.icon,
         color: dto.color,
-        targetDays: dto.targetDays,
+        mode,
+        targetDays,
+        ...(versus ? { sprintDays: dto.sprintDays!, startDate: todayUtc() } : {}),
         ownerId: userId,
         members: {
           create: [
@@ -90,8 +128,10 @@ export class GoalsService {
         this.notifications.create(
           id,
           'GROUP_GOAL_INVITE',
-          'Общая цель',
-          `${who} зовёт держать «${dto.title}» вместе — ${dto.targetDays} дней`,
+          versus ? 'Спор' : 'Общая цель',
+          versus
+            ? `${who} зовёт спорить: «${dto.title}» — ${dto.sprintCount} спринтов по ${dto.sprintDays} дней`
+            : `${who} зовёт держать «${dto.title}» вместе — ${targetDays} дней`,
           { goalId: goal.id },
         ),
       ),
@@ -151,8 +191,12 @@ export class GoalsService {
     return { ok: true, abandoned: false };
   }
 
-  /** Marks today for this member, and credits the group day if that was the last one. */
-  async checkin(userId: string, goalId: string) {
+  /**
+   * Marks today for this member. In a joint goal that also credits the group
+   * day if it was the last one missing; in a competition the day is simply
+   * this member's, and nothing is owed to anybody else.
+   */
+  async checkin(userId: string, goalId: string, proof: CheckinGoalDto = {}) {
     const goal = await this.refresh(goalId);
     if (goal.status !== 'ACTIVE') throw new BadRequestException('Эта цель уже закрыта');
 
@@ -165,8 +209,37 @@ export class GoalsService {
     });
     if (existing) throw new BadRequestException('Сегодня уже отмечено — заходи завтра');
 
-    await this.prisma.groupGoalCheckin.create({ data: { goalId, userId, date: today } });
-    await this.settle(goalId, today);
+    await this.prisma.groupGoalCheckin.create({
+      data: {
+        goalId,
+        userId,
+        date: today,
+        proofNote: proof.proofNote ?? null,
+        proofUrl: proof.proofUrl ?? null,
+      },
+    });
+
+    if (goal.mode === 'VERSUS') {
+      await this.users.grantXp(userId, VERSUS_DAY_XP);
+      // Only evidence is worth telling the others about. "X marked their day"
+      // every single day is the kind of message people mute the app over —
+      // and the standings on the card already say it.
+      if (proof.proofNote || proof.proofUrl) {
+        const who = await this.nameOf(userId);
+        const others = (await this.joinedMemberIds(goalId)).filter((id) => id !== userId);
+        for (const id of others) {
+          await this.notifications.create(
+            id,
+            'GROUP_GOAL_PROOF',
+            'Пруф в споре',
+            `${who} приложил доказательство к своему дню в «${goal.title}»`,
+            { goalId },
+          );
+        }
+      }
+    } else {
+      await this.settle(goalId, today);
+    }
 
     return this.present(goalId, userId);
   }
@@ -180,6 +253,12 @@ export class GoalsService {
   async rescue(userId: string, goalId: string) {
     const goal = await this.refresh(goalId);
     if (goal.status !== 'ACTIVE') throw new BadRequestException('Эта цель уже закрыта');
+    // Buying back a day in a competition would be buying a point off the other
+    // person. The rescue exists so one member can save the group, and in a
+    // competition there is no group to save.
+    if (goal.mode === 'VERSUS') {
+      throw new BadRequestException('В споре прошлый день не выкупишь');
+    }
 
     const member = await this.memberOrThrow(goalId, userId);
     if (member.status !== 'JOINED') throw new BadRequestException('Ты не участник этой цели');
@@ -312,6 +391,7 @@ export class GoalsService {
     const goal = await this.prisma.groupGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Цель не найдена');
     if (goal.status !== 'ACTIVE') return goal;
+    if (goal.mode === 'VERSUS') return this.settleSprints(goal);
     if (goal.currentCount === 0 || !goal.lastCountedDate) return goal;
 
     const gap = daysBetween(goal.lastCountedDate, todayUtc());
@@ -355,6 +435,228 @@ export class GoalsService {
     return broken;
   }
 
+  // ── competitions ────────────────────────────────────────────
+
+  /** How many sprints the competition is made of. */
+  private sprintTotal(goal: GoalRow): number {
+    return Math.max(1, Math.floor(goal.targetDays / goal.sprintDays));
+  }
+
+  /** The UTC midnight a sprint opens on. */
+  private sprintStart(goal: GoalRow, index: number): Date {
+    return new Date(goal.startDate!.getTime() + index * goal.sprintDays * ONE_DAY_MS);
+  }
+
+  /**
+   * Which sprint today falls in, counted from zero — and equal to the total
+   * once the competition has run out of calendar, which is how "over" is known
+   * without storing it.
+   */
+  private sprintNow(goal: GoalRow): number {
+    return Math.floor(daysBetween(goal.startDate!, todayUtc()) / goal.sprintDays);
+  }
+
+  /**
+   * One sprint's result.
+   *
+   * Won by whoever marked the most days in it, and by nobody at all when that
+   * is a tie: beating someone by default is not a win. Sprints already running
+   * when a member joined are not theirs to lose — a stretch they were not in
+   * yet cannot count against them.
+   */
+  private scoreSprint(goal: GoalRow, index: number, members: Entrant[], marks: Mark[]) {
+    const from = this.sprintStart(goal, index).getTime();
+    const to = from + goal.sprintDays * ONE_DAY_MS;
+
+    const rows = members
+      .filter((m) => m.joinedAt && toUtcDate(m.joinedAt).getTime() <= from)
+      .map((m) => ({
+        userId: m.userId,
+        name: m.user.firstName,
+        days: marks.filter(
+          (c) => c.userId === m.userId && c.date.getTime() >= from && c.date.getTime() < to,
+        ).length,
+      }))
+      .sort((a, b) => b.days - a.days);
+
+    const best = rows.length > 0 ? Math.max(...rows.map((r) => r.days)) : 0;
+    const leaders = rows.filter((r) => r.days === best);
+
+    return {
+      index,
+      rows,
+      winnerId: best > 0 && leaders.length === 1 ? leaders[0].userId : null,
+      drawn: best > 0 && leaders.length > 1,
+      // Everyone at full marks is the best a sprint can end, and it is a draw.
+      // Scoring it as "nobody won" would leave the app quietly hoping your
+      // friend slips, which is the opposite of what any of this is for.
+      allPerfect: rows.length > 1 && rows.every((r) => r.days === goal.sprintDays),
+      empty: best === 0,
+    };
+  }
+
+  /**
+   * Closes every sprint that ended since the last read, announces its score,
+   * and finishes the competition once the final one is in.
+   *
+   * Lazy, like the joint goal's break: there is no scheduler in production, so
+   * a sprint that ended overnight settles the next time anybody looks.
+   * `settledSprint` is what keeps a second look from announcing it twice.
+   */
+  private async settleSprints(goal: GoalRow) {
+    if (!goal.startDate) return goal;
+
+    const total = this.sprintTotal(goal);
+    const finished = Math.max(0, Math.min(this.sprintNow(goal), total));
+    if (finished - 1 <= goal.settledSprint) return goal;
+
+    const [members, marks] = await Promise.all([this.entrants(goal.id), this.marks(goal.id)]);
+
+    for (let index = goal.settledSprint + 1; index < finished; index++) {
+      const sprint = this.scoreSprint(goal, index, members, marks);
+      for (const member of members) {
+        await this.notifications.create(
+          member.userId,
+          'GROUP_GOAL_SPRINT',
+          `Спринт ${index + 1} из ${total}`,
+          this.sprintVerdict(goal, sprint, member.userId),
+          { goalId: goal.id },
+        );
+      }
+    }
+
+    return this.prisma.groupGoal.update({
+      where: { id: goal.id },
+      data: {
+        settledSprint: finished - 1,
+        ...(finished >= total ? { status: 'COMPLETED', completedAt: new Date() } : {}),
+      },
+    });
+  }
+
+  /** The sprint's score written from one member's side of it. */
+  private sprintVerdict(
+    goal: GoalRow,
+    sprint: ReturnType<GoalsService['scoreSprint']>,
+    viewerId: string,
+  ): string {
+    const line = sprint.rows
+      .map((r) => `${r.userId === viewerId ? 'ты' : r.name} ${r.days}`)
+      .join(' · ');
+
+    if (sprint.empty) return `«${goal.title}»: спринт прошёл, не отметился никто.`;
+    if (sprint.allPerfect) return `«${goal.title}»: ${line} — взяли все, спринт чистый.`;
+    if (sprint.drawn) return `«${goal.title}»: ${line} — ничья.`;
+    if (sprint.winnerId === viewerId) return `«${goal.title}»: ${line} — спринт твой.`;
+
+    // No name in the clause on purpose: Russian would need it declined, and
+    // the line above already names whoever is standing first.
+    return `«${goal.title}»: ${line} — спринт не твой.`;
+  }
+
+  /**
+   * The competition as this member sees it: who is ahead by sprints, how the
+   * one in progress is going, and the evidence people have attached.
+   *
+   * The standing is a count of sprints, never a running total of days. A total
+   * is unwinnable the moment a real gap opens, which turns the person behind
+   * into a spectator for the rest of the distance.
+   */
+  private async versusView(goal: GoalRow, viewerId: string, viewerJoined: boolean) {
+    const total = this.sprintTotal(goal);
+    const now = this.sprintNow(goal);
+    const over = now >= total;
+    const current = Math.min(now, total - 1);
+
+    const [members, marks] = await Promise.all([this.entrants(goal.id), this.marks(goal.id)]);
+
+    const won = new Map<string, number>();
+    const perfect = new Map<string, number>();
+    const drawn = new Map<string, number>();
+    const bump = (map: Map<string, number>, id: string) => map.set(id, (map.get(id) ?? 0) + 1);
+
+    for (let index = 0; index < Math.min(now, total); index++) {
+      const sprint = this.scoreSprint(goal, index, members, marks);
+      if (sprint.winnerId) bump(won, sprint.winnerId);
+      for (const row of sprint.rows) {
+        if (row.days === goal.sprintDays) bump(perfect, row.userId);
+        if (sprint.drawn && row.days === Math.max(...sprint.rows.map((r) => r.days))) {
+          bump(drawn, row.userId);
+        }
+      }
+    }
+
+    const running = this.scoreSprint(goal, current, members, marks);
+    const today = todayUtc().getTime();
+    const daysNow = new Map(running.rows.map((r) => [r.userId, r.days]));
+
+    const standings = members
+      .map((m) => ({
+        ...m.user,
+        isMe: m.userId === viewerId,
+        sprintsWon: won.get(m.userId) ?? 0,
+        sprintsDrawn: drawn.get(m.userId) ?? 0,
+        sprintsPerfect: perfect.get(m.userId) ?? 0,
+        daysThisSprint: daysNow.get(m.userId) ?? 0,
+        markedToday: marks.some((c) => c.userId === m.userId && c.date.getTime() === today),
+      }))
+      .sort((a, b) => b.sprintsWon - a.sprintsWon || b.sprintsPerfect - a.sprintsPerfect);
+
+    return {
+      sprintDays: goal.sprintDays,
+      sprintCount: total,
+      // 1-based for reading. Once it is over this is the last sprint, not one
+      // past it — there is no sprint 21 of 20 to show.
+      sprintNumber: over ? total : current + 1,
+      dayInSprint: over
+        ? goal.sprintDays
+        : (daysBetween(goal.startDate!, todayUtc()) % goal.sprintDays) + 1,
+      over,
+      standings,
+      proofs: viewerJoined ? await this.proofs(goal.id, members) : [],
+    };
+  }
+
+  /**
+   * Evidence, newest first, and only for people inside this goal.
+   *
+   * Nothing else in the app returns it. A photo says far more about a person
+   * than a count does, and the only audience it needs is the one that can
+   * tell whether it is honest.
+   */
+  private async proofs(goalId: string, members: Entrant[]) {
+    const rows = await this.prisma.groupGoalCheckin.findMany({
+      where: { goalId, OR: [{ proofNote: { not: null } }, { proofUrl: { not: null } }] },
+      orderBy: { date: 'desc' },
+      take: PROOF_FEED_SIZE,
+      select: { id: true, userId: true, date: true, proofNote: true, proofUrl: true },
+    });
+
+    const byId = new Map(members.map((m) => [m.userId, m.user]));
+    return rows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      note: r.proofNote,
+      url: r.proofUrl,
+      author: byId.get(r.userId) ?? null,
+    }));
+  }
+
+  private entrants(goalId: string): Promise<Entrant[]> {
+    return this.prisma.groupGoalMember.findMany({
+      where: { goalId, status: 'JOINED' },
+      select: { userId: true, joinedAt: true, user: { select: MEMBER_CARD } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private marks(goalId: string): Promise<Mark[]> {
+    return this.prisma.groupGoalCheckin.findMany({
+      where: { goalId },
+      select: { userId: true, date: true },
+    });
+  }
+
   /** The goal as this member sees it: progress, who marked today, what they can do. */
   private async present(goalId: string, viewerId: string) {
     const goal = await this.refresh(goalId);
@@ -392,11 +694,14 @@ export class GoalsService {
       !markedYesterday.has(viewerId) &&
       Boolean(viewer.joinedAt && daysBetween(viewer.joinedAt, yesterday) >= 0);
 
+    const versus = goal.mode === 'VERSUS';
+
     return {
       id: goal.id,
       title: goal.title,
       icon: goal.icon,
       color: goal.color,
+      mode: goal.mode,
       targetDays: goal.targetDays,
       currentCount: goal.currentCount,
       status: goal.status,
@@ -407,9 +712,16 @@ export class GoalsService {
       markedToday: markedToday.has(viewerId),
       atRisk,
       canRescue,
-      waitingOn: joined
-        .filter((m) => !markedToday.has(m.userId))
-        .map((m) => ({ ...m.user, isMe: m.userId === viewerId })),
+      // Everything below the line is the competition's own view. The fields
+      // above stay filled in both modes so one card list can hold both kinds.
+      versus: versus ? await this.versusView(goal, viewerId, viewer?.status === 'JOINED') : null,
+      // Nobody is waiting on anybody in a competition — an unmarked day there
+      // costs its owner and no one else.
+      waitingOn: versus
+        ? []
+        : joined
+            .filter((m) => !markedToday.has(m.userId))
+            .map((m) => ({ ...m.user, isMe: m.userId === viewerId })),
       members: joined.map((m) => ({
         ...m.user,
         isMe: m.userId === viewerId,

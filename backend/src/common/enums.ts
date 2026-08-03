@@ -52,6 +52,14 @@ export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
 export const GROUP_GOAL_STATUSES = ['ACTIVE', 'COMPLETED', 'ABANDONED'] as const;
 export type GroupGoalStatus = (typeof GROUP_GOAL_STATUSES)[number];
 
+/**
+ * TOGETHER — one count the whole group earns. VERSUS — everyone keeps their
+ * own days and they are scored in sprints, so the person behind is never more
+ * than one sprint away from being level again.
+ */
+export const GOAL_MODES = ['TOGETHER', 'VERSUS'] as const;
+export type GoalMode = (typeof GOAL_MODES)[number];
+
 /** An invitation is not participation — a goal never waits on an INVITED member. */
 export const GROUP_MEMBER_STATUSES = ['INVITED', 'JOINED'] as const;
 export type GroupMemberStatus = (typeof GROUP_MEMBER_STATUSES)[number];
@@ -76,5 +84,9 @@ export const NOTIFICATION_TYPES = [
   'GROUP_GOAL_DAY',
   'GROUP_GOAL_BROKEN',
   'GROUP_GOAL_COMPLETED',
+  /** A sprint of a competition closed and the score for it is final. */
+  'GROUP_GOAL_SPRINT',
+  /** Somebody attached evidence to their day. The only reason proof works. */
+  'GROUP_GOAL_PROOF',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

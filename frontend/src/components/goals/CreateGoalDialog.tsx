@@ -7,8 +7,18 @@ import { displayName, initials } from '@/lib/social';
 import { pluralizeDays } from '@/lib/streak';
 import { COLORS, ICONS } from '@/lib/palette';
 import { cn } from '@/lib/utils';
+import type { GoalMode } from '@/types/api';
 
 const TARGETS = [7, 14, 30, 60, 100];
+
+/** Short enough to restart often, long enough that one bad day is not the verdict. */
+const SPRINT_LENGTHS = [3, 5, 7];
+const SPRINT_COUNTS = [4, 10, 20];
+
+const MODES = [
+  { value: 'TOGETHER', label: 'Держим вместе' },
+  { value: 'VERSUS', label: 'Спорим' },
+] as const;
 
 /**
  * A shared goal cannot be made alone, so the friend picker is not an optional
@@ -22,16 +32,23 @@ export function CreateGoalDialog() {
   const [title, setTitle] = useState('');
   const [icon, setIcon] = useState(ICONS[1]);
   const [color, setColor] = useState(COLORS[4]);
+  const [mode, setMode] = useState<GoalMode>('TOGETHER');
   const [targetDays, setTargetDays] = useState(30);
+  const [sprintDays, setSprintDays] = useState(5);
+  const [sprintCount, setSprintCount] = useState(20);
   const [members, setMembers] = useState<string[]>([]);
 
   const hasFriends = (friends?.length ?? 0) > 0;
+  const versus = mode === 'VERSUS';
 
   function reset() {
     setTitle('');
     setIcon(ICONS[1]);
     setColor(COLORS[4]);
+    setMode('TOGETHER');
     setTargetDays(30);
+    setSprintDays(5);
+    setSprintCount(20);
     setMembers([]);
   }
 
@@ -44,7 +61,16 @@ export function CreateGoalDialog() {
   function handleCreate() {
     if (!title.trim() || members.length === 0) return;
     createGoal.mutate(
-      { title: title.trim(), icon, color, targetDays, memberIds: members },
+      {
+        title: title.trim(),
+        icon,
+        color,
+        mode,
+        // A competition's length is a product of sprints, so it never leaves a
+        // short final one; a joint goal is simply a number of days.
+        ...(versus ? { sprintDays, sprintCount } : { targetDays }),
+        memberIds: members,
+      },
       {
         onSuccess: () => {
           setOpen(false);
@@ -64,17 +90,17 @@ export function CreateGoalDialog() {
     >
       <DialogTrigger asChild>
         <Button variant="outline" className="w-full">
-          Общая цель
+          Цель или спор
         </Button>
       </DialogTrigger>
 
       <DialogContent className="max-h-[85vh] overflow-y-auto no-scrollbar">
-        <DialogTitle>Общая цель</DialogTitle>
+        <DialogTitle>{versus ? 'Спор' : 'Общая цель'}</DialogTitle>
 
         {!hasFriends ? (
           <p className="mt-5 text-sm leading-relaxed text-graphite">
-            Держать цель вместе не с кем: сначала добавь друзей на вкладке «Друзья». Позвать можно
-            только тех, кто принял заявку.
+            Договариваться не с кем: сначала добавь друзей на вкладке «Друзья». Позвать можно только
+            тех, кто принял заявку.
           </p>
         ) : (
           <div className="mt-5 space-y-5">
@@ -90,25 +116,101 @@ export function CreateGoalDialog() {
             </fieldset>
 
             <fieldset>
-              <legend className="field-label mb-2">Держим</legend>
-              <div className="flex flex-wrap gap-1.5">
-                {TARGETS.map((days) => (
+              <legend className="field-label mb-2">Как договоримся</legend>
+              <div className="flex gap-1.5">
+                {MODES.map((option) => (
                   <button
-                    key={days}
-                    onClick={() => setTargetDays(days)}
-                    aria-pressed={targetDays === days}
+                    key={option.value}
+                    onClick={() => setMode(option.value)}
+                    aria-pressed={mode === option.value}
                     className={cn(
-                      'min-w-[3.5rem] border px-2 py-2 font-mono text-xs uppercase transition-colors',
-                      targetDays === days
+                      'flex-1 border px-2 py-2 font-mono text-xs uppercase transition-colors',
+                      mode === option.value
                         ? 'border-ink bg-ink/[0.06] text-ink'
                         : 'border-ink/20 text-graphite hover:border-ink/50',
                     )}
                   >
-                    {days} {pluralizeDays(days)}
+                    {option.label}
                   </button>
                 ))}
               </div>
+              <p className="mt-1.5 text-[0.8125rem] leading-snug text-graphite">
+                {versus
+                  ? 'Каждый считает свои дни. Счёт идёт по спринтам, а не одной суммой за всё время — отставший всегда в одном спринте от того, чтобы сравняться.'
+                  : 'Один счёт на всех. День засчитывается, только когда отметились все.'}
+              </p>
             </fieldset>
+
+            {versus ? (
+              <>
+                <fieldset>
+                  <legend className="field-label mb-2">Спринт</legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SPRINT_LENGTHS.map((days) => (
+                      <button
+                        key={days}
+                        onClick={() => setSprintDays(days)}
+                        aria-pressed={sprintDays === days}
+                        className={cn(
+                          'min-w-[3.5rem] border px-2 py-2 font-mono text-xs uppercase transition-colors',
+                          sprintDays === days
+                            ? 'border-ink bg-ink/[0.06] text-ink'
+                            : 'border-ink/20 text-graphite hover:border-ink/50',
+                        )}
+                      >
+                        {days} {pluralizeDays(days)}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <fieldset>
+                  <legend className="field-label mb-2">Сколько спринтов</legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SPRINT_COUNTS.map((count) => (
+                      <button
+                        key={count}
+                        onClick={() => setSprintCount(count)}
+                        aria-pressed={sprintCount === count}
+                        className={cn(
+                          'min-w-[3.5rem] border px-2 py-2 font-mono text-xs uppercase transition-colors',
+                          sprintCount === count
+                            ? 'border-ink bg-ink/[0.06] text-ink'
+                            : 'border-ink/20 text-graphite hover:border-ink/50',
+                        )}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 font-mono text-micro uppercase text-graphite">
+                    всего <span className="figure">{sprintDays * sprintCount}</span>{' '}
+                    {pluralizeDays(sprintDays * sprintCount)}
+                  </p>
+                </fieldset>
+              </>
+            ) : (
+              <fieldset>
+                <legend className="field-label mb-2">Держим</legend>
+                <div className="flex flex-wrap gap-1.5">
+                  {TARGETS.map((days) => (
+                    <button
+                      key={days}
+                      onClick={() => setTargetDays(days)}
+                      aria-pressed={targetDays === days}
+                      className={cn(
+                        'min-w-[3.5rem] border px-2 py-2 font-mono text-xs uppercase transition-colors',
+                        targetDays === days
+                          ? 'border-ink bg-ink/[0.06] text-ink'
+                          : 'border-ink/20 text-graphite hover:border-ink/50',
+                      )}
+                    >
+                      {days} {pluralizeDays(days)}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
             <fieldset>
               <legend className="field-label mb-2">
@@ -151,8 +253,9 @@ export function CreateGoalDialog() {
                 })}
               </div>
               <p className="mt-1.5 text-[0.8125rem] leading-snug text-graphite">
-                День засчитывается группе, только когда отметились все. Пропущенный день можно
-                выкупить сердцем — но лишь один.
+                {versus
+                  ? 'К любому дню можно приложить пруф — фото, ссылку, строку. Его никто не подтверждает, и видят его только те, кто в этом споре.'
+                  : 'День засчитывается группе, только когда отметились все. Пропущенный день можно выкупить сердцем — но лишь один.'}
               </p>
             </fieldset>
 
@@ -176,7 +279,7 @@ export function CreateGoalDialog() {
             </fieldset>
 
             <fieldset>
-              <legend className="field-label mb-2">Метка цели</legend>
+              <legend className="field-label mb-2">{versus ? 'Метка спора' : 'Метка цели'}</legend>
               <div className="flex flex-wrap gap-1.5">
                 {COLORS.map((c) => (
                   <button
@@ -207,7 +310,7 @@ export function CreateGoalDialog() {
               disabled={!title.trim() || members.length === 0 || createGoal.isPending}
               onClick={handleCreate}
             >
-              {members.length === 0 ? 'Выбери, кого позвать' : 'Завести цель'}
+              {members.length === 0 ? 'Выбери, кого позвать' : versus ? 'Спорим' : 'Завести цель'}
             </Button>
           </div>
         )}

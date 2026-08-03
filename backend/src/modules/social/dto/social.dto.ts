@@ -8,11 +8,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Max,
   Min,
 } from 'class-validator';
-import { REACTION_KEYS, ReactionKey } from '../../../common/enums';
+import { GOAL_MODES, GoalMode, REACTION_KEYS, ReactionKey } from '../../../common/enums';
 
 export class UpdatePrivacyDto {
   @IsOptional()
@@ -51,16 +52,57 @@ export class CreateGoalDto {
   @IsHexColor()
   color: string;
 
-  /** A week is the shortest span that means anything; a year is the longest
-   *  a group can realistically promise each other. */
+  @IsOptional()
+  @IsIn(GOAL_MODES)
+  mode?: GoalMode;
+
+  /**
+   * TOGETHER only, and required there. A competition's length is not given in
+   * days but as a count of sprints, so that it can never leave a remainder —
+   * a final sprint two days long would be a different game from the rest.
+   *
+   * A week is the shortest span that means anything; a year is the longest a
+   * group can realistically promise each other.
+   */
+  @IsOptional()
   @IsInt()
   @Min(3)
   @Max(365)
-  targetDays: number;
+  targetDays?: number;
+
+  /** VERSUS only. Short enough to restart often, long enough that one bad day
+   *  is not the whole verdict. */
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(14)
+  sprintDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(60)
+  sprintCount?: number;
 
   /** Friends invited to hold it. The creator is joined automatically. */
   @IsArray()
   @ArrayMaxSize(10)
   @IsString({ each: true })
   memberIds: string[];
+}
+
+/**
+ * Evidence is optional on every mark and never required by anything. See the
+ * comment on GroupGoalCheckin.proofNote for why it is not a gate.
+ */
+export class CheckinGoalDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 280)
+  proofNote?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
+  @Length(1, 500)
+  proofUrl?: string;
 }

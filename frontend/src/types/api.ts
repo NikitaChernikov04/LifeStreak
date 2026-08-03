@@ -266,11 +266,51 @@ export interface GoalMember {
   markedToday: boolean;
 }
 
+/** TOGETHER — one count the group earns. VERSUS — a bet, scored in sprints. */
+export type GoalMode = 'TOGETHER' | 'VERSUS';
+
+export interface VersusStanding {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  level: number;
+  isMe: boolean;
+  sprintsWon: number;
+  sprintsDrawn: number;
+  /** Sprints where they marked every single day. */
+  sprintsPerfect: number;
+  daysThisSprint: number;
+  markedToday: boolean;
+}
+
+export interface GoalProof {
+  id: string;
+  date: string;
+  note: string | null;
+  url: string | null;
+  author: { id: string; firstName: string; avatarUrl: string | null } | null;
+}
+
+export interface VersusView {
+  sprintDays: number;
+  sprintCount: number;
+  /** 1-based, and never past the last one. */
+  sprintNumber: number;
+  dayInSprint: number;
+  over: boolean;
+  standings: VersusStanding[];
+  /** Only ever populated for people inside the goal. */
+  proofs: GoalProof[];
+}
+
 export interface GroupGoal {
   id: string;
   title: string;
   icon: string;
   color: string;
+  mode: GoalMode;
   targetDays: number;
   currentCount: number;
   status: GroupGoalStatus;
@@ -279,12 +319,14 @@ export interface GroupGoal {
   completedAt: string | null;
   myStatus: GroupMemberStatus | null;
   markedToday: boolean;
-  /** Yesterday is missing and a heart can still buy it back. */
+  /** Yesterday is missing and a heart can still buy it back. TOGETHER only. */
   atRisk: boolean;
   canRescue: boolean;
+  /** Empty in VERSUS: an unmarked day there costs its owner and nobody else. */
   waitingOn: { id: string; firstName: string; isMe: boolean }[];
   members: GoalMember[];
   invited: Omit<GoalMember, 'isMe' | 'markedToday'>[];
+  versus: VersusView | null;
 }
 
 export interface Paginated<T> {

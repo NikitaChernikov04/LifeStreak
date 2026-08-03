@@ -5,6 +5,7 @@ import { SocialService } from './social.service';
 import { FeedService } from './feed.service';
 import { GoalsService } from './goals.service';
 import {
+  CheckinGoalDto,
   CreateGoalDto,
   ReactDto,
   SearchUsersDto,
@@ -130,9 +131,14 @@ export class SocialController {
     return this.goals.leave(userId, goalId);
   }
 
+  /** The body is optional: evidence is never required to mark a day. */
   @Post('goals/:id/checkin')
-  checkinGoal(@CurrentUser('id') userId: string, @Param('id') goalId: string) {
-    return this.goals.checkin(userId, goalId);
+  checkinGoal(
+    @CurrentUser('id') userId: string,
+    @Param('id') goalId: string,
+    @Body() dto: CheckinGoalDto,
+  ) {
+    return this.goals.checkin(userId, goalId, dto);
   }
 
   @Post('goals/:id/rescue')

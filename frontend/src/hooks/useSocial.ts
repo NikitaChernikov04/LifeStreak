@@ -6,6 +6,7 @@ import type {
   FeedEntry,
   FriendRequest,
   FriendState,
+  GoalMode,
   GroupGoal,
   LeaderboardRow,
   Paginated,
@@ -165,11 +166,18 @@ export function useGoals() {
   });
 }
 
+/**
+ * A competition's length is given as a count of sprints, never in days: the
+ * backend multiplies them out so the last sprint can never come up short.
+ */
 export interface CreateGoalInput {
   title: string;
   icon: string;
   color: string;
-  targetDays: number;
+  mode?: GoalMode;
+  targetDays?: number;
+  sprintDays?: number;
+  sprintCount?: number;
   memberIds: string[];
 }
 
@@ -210,19 +218,33 @@ const GOAL_MILESTONES = [7, 14, 30, 50, 100, 180, 365];
  * and then only at a milestone or the finish. A stamp every single day would
  * stop meaning anything by the third one.
  */
+export interface CheckinGoalInput {
+  goal: GroupGoal;
+  /** Evidence, in a competition. Never required, never approved by anyone. */
+  proofNote?: string;
+  proofUrl?: string;
+}
+
 export function useCheckinGoal() {
   const queryClient = useQueryClient();
   const pushCelebration = useCelebrationStore((s) => s.push);
 
   return useMutation({
-    mutationFn: (goal: GroupGoal) =>
+    mutationFn: ({ goal, proofNote, proofUrl }: CheckinGoalInput) =>
       api
-        .post<unknown, GroupGoal>(`/social/goals/${goal.id}/checkin`)
+        .post<unknown, GroupGoal>(`/social/goals/${goal.id}/checkin`, {
+          ...(proofNote ? { proofNote } : {}),
+          ...(proofUrl ? { proofUrl } : {}),
+        })
         .then((updated) => ({ updated, before: goal })),
     onSuccess: ({ updated, before }) => {
       hapticNotification('success');
       queryClient.invalidateQueries({ queryKey: SOCIAL });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
+
+      // A competition has no shared count to move, and celebrating your own
+      // tap every day would wear the theatre out by the third one.
+      if (updated.mode === 'VERSUS') return;
 
       const dayClosed = updated.currentCount > before.currentCount;
       if (!dayClosed) return;
