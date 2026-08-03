@@ -9,6 +9,7 @@ import {
   useLeaveGoal,
 } from '@/hooks/useSocial';
 import { useProofImage } from '@/hooks/useProofImage';
+import { ProofViewer } from '@/components/goals/ProofViewer';
 import { compressImage, formatBytes, type CompressedImage } from '@/lib/image';
 import { formatDayMark } from '@/lib/streak';
 import { cn } from '@/lib/utils';
@@ -393,6 +394,8 @@ function Proofs({ goalId, versus }: { goalId: string; versus: VersusView }) {
 
 function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
   const { url, isPending, isError } = useProofImage(goalId, proof.id, proof.hasImage);
+  const [viewing, setViewing] = useState(false);
+  const caption = `${proof.author?.firstName ?? 'участник'} · ${formatDayMark(proof.date)}`;
 
   return (
     <li className="text-[0.8125rem] leading-snug">
@@ -414,11 +417,22 @@ function ProofRow({ goalId, proof }: { goalId: string; proof: GoalProof }) {
       {proof.hasImage && (
         <div className="mt-1">
           {url ? (
-            <img
-              src={url}
-              alt={`Пруф — ${proof.author?.firstName ?? 'участник'}`}
-              className="max-h-56 w-full border border-ink/20 object-contain"
-            />
+            <>
+              {/* A card-sized thumbnail cannot show a commit hash or a receipt,
+                  so the small one is only ever the way into the big one. */}
+              <button
+                onClick={() => setViewing(true)}
+                aria-label={`Открыть пруф крупнее — ${caption}`}
+                className="block w-full cursor-zoom-in"
+              >
+                <img
+                  src={url}
+                  alt={`Пруф — ${proof.author?.firstName ?? 'участник'}`}
+                  className="max-h-56 w-full border border-ink/20 object-contain"
+                />
+              </button>
+              <ProofViewer src={url} caption={caption} open={viewing} onOpenChange={setViewing} />
+            </>
           ) : (
             <div className="flex h-16 items-center justify-center border border-dashed border-ink/25 font-mono text-micro uppercase text-graphite">
               {isError ? 'фото не открылось' : isPending ? 'загружаю фото…' : ''}
