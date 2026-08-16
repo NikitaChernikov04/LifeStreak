@@ -22,6 +22,7 @@ import { SocialService } from './social.service';
 import { FeedService } from './feed.service';
 import { GoalsService } from './goals.service';
 import {
+  AttachProofDto,
   CheckinGoalDto,
   CreateGoalDto,
   ProofsQueryDto,
@@ -180,13 +181,19 @@ export class SocialController {
   attachProof(
     @CurrentUser('id') userId: string,
     @Param('id') goalId: string,
+    @Body() dto: AttachProofDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    if (!file) throw new BadRequestException('Файл не пришёл');
-    if (!PROOF_MIME_TYPES.includes(file.mimetype as (typeof PROOF_MIME_TYPES)[number])) {
+    if (file && !PROOF_MIME_TYPES.includes(file.mimetype as (typeof PROOF_MIME_TYPES)[number])) {
       throw new BadRequestException('Пруф должен быть картинкой');
     }
-    return this.goals.attachProof(userId, goalId, file.buffer, file.mimetype);
+    // A file is no longer required: the note and the link are edited through
+    // here too, and demanding a photo to fix a typo would be absurd.
+    return this.goals.attachProof(userId, goalId, {
+      note: dto.proofNote,
+      url: dto.proofUrl,
+      file: file ? { buffer: file.buffer, mimeType: file.mimetype } : undefined,
+    });
   }
 
   /** The days this goal has proofs on — the list the history is browsed by. */

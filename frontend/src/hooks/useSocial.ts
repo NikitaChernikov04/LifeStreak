@@ -336,9 +336,24 @@ export function useGoalProofs(goalId: string, date: string | null) {
 export function useAttachProof() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ goalId, blob, filename }: { goalId: string; blob: Blob; filename: string }) => {
+    mutationFn: ({
+      goalId,
+      blob,
+      filename,
+      note,
+      url,
+    }: {
+      goalId: string;
+      blob?: Blob;
+      filename?: string;
+      /** Sent as an empty string to clear what was written before. */
+      note?: string;
+      url?: string;
+    }) => {
       const form = new FormData();
-      form.append('image', blob, filename);
+      if (blob && filename) form.append('image', blob, filename);
+      if (note !== undefined) form.append('proofNote', note);
+      if (url !== undefined) form.append('proofUrl', url);
       // No Content-Type here on purpose: axios writes the multipart boundary.
       return api.post<unknown, GroupGoal>(`/social/goals/${goalId}/proof`, form);
     },

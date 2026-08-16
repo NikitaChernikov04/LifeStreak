@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +13,7 @@ import { ProofHistory } from '@/components/goals/ProofHistory';
 import { RefreshButton } from '@/components/goals/RefreshButton';
 import { compressImage, formatBytes, type CompressedImage } from '@/lib/image';
 import { formatDayMark } from '@/lib/streak';
+import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
 import type { GoalProof, GroupGoal, VersusView } from '@/types/api';
 
@@ -35,6 +36,25 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
   const [squeezing, setSqueezing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const myId = useAuthStore((s) => s.user?.id);
+
+  // Show what is already saved on today's mark rather than an empty box over
+  // the top of it. Computed here rather than below because the early return
+  // for a goal with no versus view sits between, and a hook cannot live after
+  // a conditional return.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const savedProof = goal.versus?.proofs.find(
+    (p) => p.author?.id === myId && p.date.slice(0, 10) === todayIso,
+  );
+  const savedNote = savedProof?.note ?? null;
+  const savedUrl = savedProof?.url ?? null;
+
+  useEffect(() => {
+    if (!goal.markedToday) return;
+    setNote(savedNote ?? '');
+    setUrl(savedUrl ?? '');
+  }, [goal.markedToday, savedNote, savedUrl]);
+
   const checkin = useCheckinGoal();
   const attach = useAttachProof();
   const complete = useCompleteGoal();
@@ -46,6 +66,9 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
 
   const invited = goal.myStatus === 'INVITED';
   const done = goal.status === 'COMPLETED' || versus.over;
+
+  const proofChanged =
+    Boolean(photo) || note.trim() !== (savedNote ?? '') || url.trim() !== (savedUrl ?? '');
   const progress = Math.min(100, (versus.sprintNumber / versus.sprintCount) * 100);
   const busy = checkin.isPending || attach.isPending || squeezing;
 
@@ -78,13 +101,20 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
     }
   }
 
+  /**
+   * Saves the proof onto a day already marked. Only what actually changed is
+   * sent: an untouched field is left out entirely, so replacing a photo never
+   * quietly rewrites the note beside it.
+   */
   async function upload() {
-    if (!photo) return;
-    const extension = photo.blob.type === 'image/webp' ? 'webp' : 'jpg';
+    const extension = photo?.blob.type === 'image/webp' ? 'webp' : 'jpg';
+    if (!proofChanged) return;
     await attach.mutateAsync({
       goalId: goal.id,
-      blob: photo.blob,
-      filename: `proof.${extension}`,
+      blob: photo?.blob,
+      filename: photo ? `proof.${extension}` : undefined,
+      note: note.trim() === (savedNote ?? '') ? undefined : note.trim(),
+      url: url.trim() === (savedUrl ?? '') ? undefined : url.trim(),
     });
     dropPhoto();
   }
@@ -183,25 +213,26 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
 
             {proofOpen || goal.markedToday ? (
               <div className="border border-dashed border-ink/30 p-2.5">
-                {!goal.markedToday && (
-                  <>
-                    <input
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      maxLength={280}
-                      placeholder="Что именно сделал"
-                      className="w-full border-b border-ink/20 bg-transparent pb-1 text-[0.875rem] outline-none placeholder:text-graphite/70"
-                    />
-                    <input
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                      maxLength={500}
-                      inputMode="url"
-                      placeholder="Ссылка на скрин или коммит"
-                      className="mt-2 w-full border-b border-ink/20 bg-transparent pb-1 font-mono text-[0.75rem] outline-none placeholder:text-graphite/70"
-                    />
-                  </>
-                )}
+                {/* The same three fields whether or not the day is already
+                    marked. They used to disappear the moment somebody pressed
+                    "Отметить день", leaving a photo picker and no way to say
+                    what they had actually done — and since marking is the
+                    primary action, that is the order most people do it in. */}
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={280}
+                  placeholder="Что именно сделал"
+                  className="w-full border-b border-ink/20 bg-transparent pb-1 text-[0.875rem] outline-none placeholder:text-graphite/70"
+                />
+                <input
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  maxLength={500}
+                  inputMode="url"
+                  placeholder="Ссылка на скрин или коммит"
+                  className="mt-2 w-full border-b border-ink/20 bg-transparent pb-1 font-mono text-[0.75rem] outline-none placeholder:text-graphite/70"
+                />
 
                 {photoPreview && photo ? (
                   <div className="mt-2">
@@ -249,11 +280,16 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
                   видят только те, кто в споре. Никто не подтверждает — просто видно
                 </p>
 
-                {/* Marking already happened; this button exists only to send a
-                    photo added after the fact. */}
-                {goal.markedToday && photo && (
-                  <Button size="sm" className="mt-2 w-full" disabled={busy} onClick={upload}>
-                    Приложить пруф
+                {/* Marking already happened, so this saves whatever changed —
+                    a photo, a note, a link, or all three. */}
+                {goal.markedToday && (
+                  <Button
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={busy || !proofChanged}
+                    onClick={upload}
+                  >
+                    {attach.isPending ? 'Сохраняю…' : 'Сохранить пруф'}
                   </Button>
                 )}
               </div>

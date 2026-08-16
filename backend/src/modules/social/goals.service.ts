@@ -340,7 +340,25 @@ export class GoalsService {
    * one. It also means a proof can be added after the fact, which is what
    * people actually do.
    */
-  async attachProof(userId: string, goalId: string, file: Buffer, mimeType: string) {
+  /**
+   * Adds or edits the proof on a day already marked — note, link and photo.
+   *
+   * All three, not just the photo, because the note and the link used to be
+   * writable only in the same breath as the check-in. Marking the day is the
+   * primary action and people press it first, and after that there was no way
+   * left to say what they had actually done: the form quietly dropped to a
+   * photo picker. What somebody writes about their day should not depend on
+   * whether they thought about writing it before or after pressing the button.
+   *
+   * `undefined` leaves a field alone; an empty string clears it. That
+   * distinction is what lets a person take back a note without also being
+   * unable to leave one untouched while replacing the photo.
+   */
+  async attachProof(
+    userId: string,
+    goalId: string,
+    proof: { note?: string; url?: string; file?: { buffer: Buffer; mimeType: string } },
+  ) {
     const goal = await this.prisma.groupGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Цель не найдена');
     if (goal.status !== 'ACTIVE') throw new BadRequestException('Эта цель уже закрыта');
@@ -354,24 +372,44 @@ export class GoalsService {
     });
     if (!mark) throw new BadRequestException('Сначала отметь день — пруф прикладывается к нему');
 
-    const pathname = await this.storage.save(goalId, userId, file, mimeType);
-    await this.prisma.groupGoalCheckin.update({
-      where: { id: mark.id },
-      data: { proofImage: pathname },
-    });
-    // Replacing a photo should not leave the old one on the bill forever.
-    if (mark.proofImage) await this.storage.forget(mark.proofImage);
-
-    const who = await this.nameOf(userId);
-    const others = (await this.joinedMemberIds(goalId)).filter((id) => id !== userId);
-    for (const id of others) {
-      await this.notifications.create(
-        id,
-        'GROUP_GOAL_PROOF',
-        'Пруф в споре',
-        `${who} приложил фото к своему дню в «${goal.title}»`,
-        { goalId },
+    const data: { proofImage?: string; proofNote?: string | null; proofUrl?: string | null } = {};
+    if (proof.file) {
+      data.proofImage = await this.storage.save(
+        goalId,
+        userId,
+        proof.file.buffer,
+        proof.file.mimeType,
       );
+    }
+    if (proof.note !== undefined) data.proofNote = proof.note.trim() || null;
+    if (proof.url !== undefined) data.proofUrl = proof.url.trim() || null;
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Нечего прикладывать');
+    }
+
+    await this.prisma.groupGoalCheckin.update({ where: { id: mark.id }, data });
+    // Replacing a photo should not leave the old one on the bill forever.
+    if (data.proofImage && mark.proofImage) await this.storage.forget(mark.proofImage);
+
+    // Say what actually arrived. "Приложил фото" on a note nobody photographed
+    // sends the other person looking for a picture that is not there.
+    const added: string[] = [];
+    if (data.proofImage) added.push('фото');
+    if (data.proofNote) added.push('запись');
+    if (data.proofUrl) added.push('ссылку');
+    if (added.length > 0) {
+      const who = await this.nameOf(userId);
+      const others = (await this.joinedMemberIds(goalId)).filter((id) => id !== userId);
+      for (const id of others) {
+        await this.notifications.create(
+          id,
+          'GROUP_GOAL_PROOF',
+          'Пруф в споре',
+          `${who} приложил ${added.join(' и ')} к своему дню в «${goal.title}»`,
+          { goalId },
+        );
+      }
     }
 
     return this.present(goalId, userId);

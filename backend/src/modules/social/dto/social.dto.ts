@@ -12,7 +12,9 @@ import {
   IsUrl,
   Length,
   Max,
+  MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { GOAL_MODES, GoalMode, REACTION_KEYS, ReactionKey } from '../../../common/enums';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
@@ -113,5 +115,30 @@ export class CheckinGoalDto {
   @IsOptional()
   @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
   @Length(1, 500)
+  proofUrl?: string;
+}
+
+/**
+ * Editing the proof on a day already marked.
+ *
+ * Note and link allow an empty string, which the checkin DTO does not: there
+ * the fields are only ever being written for the first time, and an empty one
+ * means "not given". Here the form arrives carrying what is already saved, so
+ * an empty field is a person deleting what they wrote, and refusing it would
+ * make a note impossible to take back.
+ *
+ * Arrives as multipart alongside an optional file, so every value is a string.
+ */
+export class AttachProofDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  proofNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  @ValidateIf((_, value) => value !== '')
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
   proofUrl?: string;
 }
