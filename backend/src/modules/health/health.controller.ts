@@ -15,7 +15,15 @@ export class HealthController {
   @Public()
   @Get()
   async check() {
+    // How long the round trip to Postgres took, reported rather than
+    // discarded. Every interesting endpoint here is a chain of sequential
+    // queries, so this number multiplied by the length of that chain is what
+    // a user actually waits for — and it is the number that says whether the
+    // function and the database still live in the same region.
+    const started = Date.now();
     await this.prisma.$queryRaw`SELECT 1`;
-    return { status: 'ok', uptime: Math.round(process.uptime()) };
+    const dbMs = Date.now() - started;
+
+    return { status: 'ok', uptime: Math.round(process.uptime()), dbMs };
   }
 }

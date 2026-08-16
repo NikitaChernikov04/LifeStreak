@@ -63,7 +63,16 @@ export function useCheckinStreak() {
       })),
     onSuccess: ({ result, streak }) => {
       hapticNotification('success');
-      queryClient.invalidateQueries({ queryKey: ['streaks'] });
+
+      // The response already carries the updated streak, so the card can be
+      // corrected from it instead of waiting for a refetch. Invalidating
+      // `streaks` alone meant the number the user just earned appeared only
+      // after a second round trip — the press, then a wait, then the change.
+      queryClient.setQueryData<Streak[]>(['streaks'], (current) =>
+        current?.map((s) => (s.id === result.streak.id ? result.streak : s)),
+      );
+      // Profile and statistics are not on screen at this moment; they refetch
+      // in the background rather than in front of the person who pressed.
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
 

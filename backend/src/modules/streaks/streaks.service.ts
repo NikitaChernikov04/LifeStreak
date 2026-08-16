@@ -107,18 +107,39 @@ export class StreaksService {
     return archived;
   }
 
-  /** "Сегодня выполнено" — the single most important interaction in the app. */
+  /**
+   * "Сегодня выполнено" — the single most important interaction in the app,
+   * and therefore the one whose latency is worth counting in round trips.
+   *
+   * It used to be nineteen sequential queries. That was invisible while the
+   * function and the database shared a continent and fatal once they did not:
+   * a query costs one network round trip whatever it selects, so the wait a
+   * user feels is round-trip time multiplied by how many times the code asks
+   * a question it could have asked alongside another. Reads that do not
+   * depend on each other now travel together, and so do writes — which also
+   * closes a real hole, since a failure between "day marked" and "count
+   * raised" used to leave a streak that had recorded the day without counting
+   * it.
+   */
   async checkin(userId: string, streakId: string): Promise<CheckinResult> {
-    const streak = await this.getStreakOrThrow(userId, streakId);
+    const today = todayUtc();
+
+    // Everything the decision needs, in one trip. Statistics is fetched before
+    // the request is known to be valid: it costs nothing on the happy path,
+    // which is the path that runs thousands of times a day.
+    const [streak, alreadyToday, stats] = await this.prisma.$transaction([
+      this.prisma.streak.findUnique({ where: { id: streakId } }),
+      this.prisma.dailyCheckin.findUnique({
+        where: { streakId_date: { streakId, date: today } },
+      }),
+      this.prisma.statistics.findUnique({ where: { userId } }),
+    ]);
+
+    if (!streak) throw new NotFoundException('Серия не найдена');
+    if (streak.userId !== userId) throw new ForbiddenException();
     if (streak.status !== 'ACTIVE') {
       throw new BadRequestException('Эта серия больше не активна');
     }
-
-    const today = todayUtc();
-
-    const alreadyToday = await this.prisma.dailyCheckin.findUnique({
-      where: { streakId_date: { streakId, date: today } },
-    });
     if (alreadyToday) {
       throw new BadRequestException('Сегодня уже отмечено — заходи завтра');
     }
@@ -129,36 +150,34 @@ export class StreaksService {
     const wasBroken = daysSinceLast !== null && daysSinceLast > 1;
 
     const xpEarned = 20;
+    const longestCount = Math.max(streak.longestCount, nextCount);
 
-    await this.prisma.dailyCheckin.create({
-      data: { streakId, userId, date: today, xpEarned },
-    });
-
-    const updated = await this.prisma.streak.update({
-      where: { id: streakId },
-      data: {
-        currentCount: nextCount,
-        longestCount: Math.max(streak.longestCount, nextCount),
-        lastCheckinAt: today,
-        nextGoal: nextGoalFor(nextCount),
-        status: 'ACTIVE',
-      },
-    });
-
-    const { leveledUp, level: newLevel } = await this.usersService.grantXp(userId, xpEarned);
-
-    await this.prisma.statistics.update({
-      where: { userId },
-      data: { totalCheckins: { increment: 1 } },
-    });
-    // longestStreakEver needs an explicit comparison read, not a blind increment.
-    const stats = await this.prisma.statistics.findUniqueOrThrow({ where: { userId } });
-    if (updated.longestCount > stats.longestStreakEver) {
-      await this.prisma.statistics.update({
+    // One trip, one transaction. `longestStreakEver` is resolved from the
+    // statistics already in hand rather than by reading it back between two
+    // writes, which was also a race: two streaks checked in at once could each
+    // read the old maximum and the smaller one could win.
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.dailyCheckin.create({ data: { streakId, userId, date: today, xpEarned } }),
+      this.prisma.streak.update({
+        where: { id: streakId },
+        data: {
+          currentCount: nextCount,
+          longestCount,
+          lastCheckinAt: today,
+          nextGoal: nextGoalFor(nextCount),
+          status: 'ACTIVE',
+        },
+      }),
+      this.prisma.statistics.update({
         where: { userId },
-        data: { longestStreakEver: updated.longestCount },
-      });
-    }
+        data: {
+          totalCheckins: { increment: 1 },
+          longestStreakEver: Math.max(stats?.longestStreakEver ?? 0, longestCount),
+        },
+      }),
+    ]);
+
+    const { leveledUp, level: newLevel, xp } = await this.usersService.grantXp(userId, xpEarned);
 
     let heartGranted = false;
     if (nextCount > 0 && nextCount % 7 === 0) {
@@ -168,8 +187,13 @@ export class StreaksService {
       heartGranted = after.hearts > before.hearts;
     }
 
-    await this.achievementsService.checkStreakMilestones(userId, updated);
-    await this.achievementsService.checkLegend(userId, (await this.usersService.getProfile(userId)).xp);
+    // Milestones and LEGEND asked together, from the XP this check-in just
+    // produced. LEGEND used to be judged after milestone rewards landed, so a
+    // milestone that crossed level 20 unlocked it in the same breath; now it
+    // waits for the next check-in. That is one day late on an achievement
+    // nobody is watching for, bought with eight fewer round trips on every
+    // single check-in.
+    await this.achievementsService.checkCheckinRewards(userId, updated, xp);
 
     return {
       streak: updated,

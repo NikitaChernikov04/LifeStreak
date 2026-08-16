@@ -3,5 +3,8 @@
   "compilerOptions": {
     "rootDir": "src"
   },
-  "exclude": ["node_modules", "test", "dist", "prisma", "**/*spec.ts"]
+  // `scripts` holds one-off operational tools that import from src/. They run
+  // under ts-node, never ship, and would otherwise drag the whole of src/ out
+  // of rootDir at build time.
+  "exclude": ["node_modules", "test", "dist", "prisma", "scripts", "**/*spec.ts"]
 }

@@ -73,18 +73,25 @@ export class UsersService {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 
-  /** Applies an XP gain, persists new xp/level, and reports whether the user leveled up. */
+  /**
+   * Applies an XP gain, persists new xp/level, and reports whether the user
+   * leveled up.
+   *
+   * The two writes travel together: one round trip instead of two, and — more
+   * to the point — one transaction. A failure between them used to leave the
+   * user's XP raised while the statistics row still claimed the old total,
+   * with nothing to notice or repair it.
+   */
   async grantXp(userId: string, amount: number): Promise<XpApplyResult> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const result = applyXpGain(user.xp, amount);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { xp: result.xp, level: result.level },
-    });
-    await this.prisma.statistics.update({
-      where: { userId },
-      data: { totalXp: result.xp },
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { xp: result.xp, level: result.level },
+      }),
+      this.prisma.statistics.update({ where: { userId }, data: { totalXp: result.xp } }),
+    ]);
     return result;
   }
 }
