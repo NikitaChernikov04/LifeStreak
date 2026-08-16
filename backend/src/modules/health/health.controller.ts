@@ -3,9 +3,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../../common/decorators/public.decorator';
 
 /**
- * Liveness/readiness probe for the platform (Fly health checks, uptime pings).
- * Touches the database so a machine with an unreachable volume or a bad
- * DATABASE_URL fails the check instead of serving 500s to real users.
+ * Liveness/readiness probe for the platform (Docker health checks, uptime
+ * pings). Touches the database on purpose, and deliberately does not catch:
+ * an instance that cannot reach Postgres must fail the check rather than
+ * answer "ok" and then serve 500s to real users.
  */
 @Controller('health')
 export class HealthController {

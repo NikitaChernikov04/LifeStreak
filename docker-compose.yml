@@ -1,7 +1,8 @@
-# Local "production-like" stack. The database is a SQLite file on a named
-# volume — the same shape the Fly deployment uses, so what you test here is
-# what runs there. No Postgres or Redis: the schema is SQLite (see
-# backend/prisma/schema.prisma) and nothing in the app reads a cache.
+# Local "production-like" stack. The database is not in here: it is a Supabase
+# project, and a Postgres container next to the app would be a different
+# database than the one production runs on — which is the opposite of what this
+# file is for. Point DATABASE_URL/DIRECT_URL at a dev Supabase project. No
+# Redis either: nothing in the app reads a cache.
 services:
   backend:
     build:
@@ -10,7 +11,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: file:/data/lifestreak.db
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env — Supabase pooler, :6543}
+      DIRECT_URL: ${DIRECT_URL:?set DIRECT_URL in .env — Supabase session, :5432}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_EXPIRES_IN: 30d
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -18,8 +20,6 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       # Set to true to include the demo user and its sample streaks.
       SEED_DEMO: ${SEED_DEMO:-false}
-    volumes:
-      - sqlite_data:/data
     ports:
       - '3000:3000'
     healthcheck:
@@ -40,6 +40,3 @@ services:
         condition: service_healthy
     ports:
       - '5173:80'
-
-volumes:
-  sqlite_data:

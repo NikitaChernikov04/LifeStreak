@@ -1,25 +1,16 @@
 import { INestApplication, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
-import { createClient } from '@libsql/client';
-import { resolveDatabaseUrl } from './resolve-database-url';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Local dev defaults to a file-backed SQLite DB so nobody needs a Turso
-    // account just to run `npm run start:dev`. Production points DATABASE_URL
-    // at libsql://<db>-<org>.turso.io with TURSO_AUTH_TOKEN set.
-    const libsql = createClient({
-      url: resolveDatabaseUrl(process.env.DATABASE_URL ?? 'file:./dev.db'),
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    const adapter = new PrismaLibSQL(libsql);
-
+    // No driver adapter and no URL rewriting: DATABASE_URL is a plain
+    // Postgres connection string and Prisma opens it directly. In production
+    // it points at Supabase's transaction pooler, which is what makes one
+    // connection per serverless invocation survivable — see schema.prisma.
     super({
-      adapter,
       log: [
         { emit: 'event', level: 'warn' },
         { emit: 'event', level: 'error' },
@@ -29,7 +20,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleInit() {
     await this.$connect();
-    this.logger.log('Connected to Turso/libSQL via Prisma');
+    this.logger.log('Connected to PostgreSQL via Prisma');
   }
 
   async onModuleDestroy() {

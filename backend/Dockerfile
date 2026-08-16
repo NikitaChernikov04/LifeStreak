@@ -25,8 +25,8 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/src ./src
 COPY package.json tsconfig.json ./
 
-# SQLite lives on the Fly volume mounted at /data (see fly.toml).
-ENV DATABASE_URL=file:/data/lifestreak.db
+# DATABASE_URL and DIRECT_URL come from the environment — the database is a
+# Supabase project, not anything this image can carry.
 
 EXPOSE 3000
 # Migrations and reference data are idempotent, so running them on every boot

@@ -1,18 +1,33 @@
-// LifeStreak — Prisma schema (Turso / libSQL)
+// LifeStreak — Prisma schema (Supabase / PostgreSQL)
 // "Стань человеком, которым всегда хотел быть."
 //
-// Runs on Turso (SQLite-compatible, edge-hosted). Prisma has no native enum
-// support on SQLite, so status/reason/key fields below are plain String
-// columns validated against the union types in src/common/enums.ts.
+// status/reason/key fields below are plain String columns validated against
+// the union types in src/common/enums.ts rather than Postgres enums. That is
+// no longer a limitation of the engine but a choice: an enum column turns
+// every new achievement key or notification type into a DDL migration that
+// has to land before the code that writes it, and the union types already
+// catch a typo at the only boundary where one can be introduced.
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
+// Two URLs, because Supabase answers on two ports and they are not
+// interchangeable:
+//
+//   DATABASE_URL — the transaction pooler (:6543). Every request the app
+//   serves runs in a short-lived serverless function, and a function that
+//   opens its own Postgres connection exhausts the server long before it
+//   exhausts the CPU. The pooler hands out a connection per transaction
+//   instead of per client, which is the only shape that survives that.
+//
+//   DIRECT_URL — a session connection (:5432), used by `prisma migrate` and
+//   nothing else. Migrations take advisory locks and run DDL, neither of
+//   which works through a transaction pooler.
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -21,7 +36,7 @@ datasource db {
 
 model User {
   id           String  @id @default(cuid())
-  telegramId   String  @unique // Telegram user id, stored as string (safe across SQLite/libSQL drivers)
+  telegramId   String  @unique // Telegram user id as a string — it exceeds 2^53 for newer accounts, so no JS-facing number type is safe for it
   username     String?
   firstName    String
   lastName     String?

@@ -1,7 +1,11 @@
 /**
- * Turso/libSQL (SQLite) has no native enum support in Prisma, so these fields
- * are plain `String` columns in schema.prisma. These union types + arrays are
- * the single source of truth for valid values everywhere in application code.
+ * These fields are plain `String` columns in schema.prisma, not Postgres
+ * enums. Under SQLite that was forced; here it is kept on purpose, because an
+ * enum column makes every new achievement key or notification type a DDL
+ * migration that has to reach production strictly before the code that writes
+ * it. The union types + arrays below are the single source of truth for valid
+ * values everywhere in application code, and they catch a typo at the only
+ * boundary where one can be introduced.
  */
 
 export const STREAK_STATUSES = ['ACTIVE', 'BROKEN', 'ARCHIVED'] as const;

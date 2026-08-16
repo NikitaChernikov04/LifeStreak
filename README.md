@@ -8,13 +8,13 @@ Telegram Mini App, превращающая жизнь пользователя 
 
 ```
 LifeStreak/
-├── backend/          # NestJS + SQLite (libSQL/Turso) + Prisma
+├── backend/          # NestJS + PostgreSQL (Supabase) + Prisma
 │   ├── api/          # index.js — точка входа Vercel (обычный JS, см. «Деплой»)
 │   ├── prisma/
 │   │   ├── migrations/
 │   │   ├── schema.prisma
 │   │   └── seed.ts
-│   ├── scripts/      # apply-schema.mjs — миграции для libsql://
+│   ├── scripts/      # import-from-turso.mjs — разовый перенос старой базы
 │   └── src/
 │       ├── main.ts       # обычный сервер: локально и в Docker
 │       ├── serverless.ts # обработчик для Vercel
@@ -41,32 +41,39 @@ LifeStreak/
 ## Быстрый старт (Docker)
 
 ```bash
-cp .env.example .env      # заполните JWT_SECRET и TELEGRAM_BOT_TOKEN
+cp .env.example .env      # заполните JWT_SECRET, TELEGRAM_BOT_TOKEN и обе строки БД
 docker compose up --build
 ```
 
 - Backend API: http://localhost:3000/api/v1
 - Frontend: http://localhost:5173
 
-База — файл SQLite на именованном томе `sqlite_data`. При каждом старте
-контейнер прогоняет `prisma migrate deploy` и сид каталогов (достижения и
-шаблоны испытаний) — обе операции идемпотентны. Чтобы получить ещё и
+Postgres в compose нет намеренно: база живёт в Supabase, и локальный контейнер
+с другим Postgres проверял бы не ту базу, на которой всё работает. При каждом
+старте контейнер прогоняет `prisma migrate deploy` и сид каталогов (достижения
+и шаблоны испытаний) — обе операции идемпотентны. Чтобы получить ещё и
 демо-пользователя с примерами серий, поставьте `SEED_DEMO=true` в `.env`.
 
 ## Локальная разработка без Docker
 
-Внешняя инфраструктура не нужна: база — обычный файл SQLite.
+Нужен **отдельный проект Supabase для разработки** — второй, не боевой.
+Бесплатный тариф даёт ровно два, и это как раз тот случай, ради которого
+стоит потратить второй: гонять миграции и сид по базе живых пользователей
+нечем оправдать.
 
 ### 1. Backend
 
 ```bash
 cd backend
-cp .env.example .env
+cp .env.example .env        # DATABASE_URL и DIRECT_URL — из dev-проекта Supabase
 npm install
-npx prisma migrate deploy   # создаст backend/prisma/dev.db
+npm run db:migrate          # prisma migrate deploy
 npm run prisma:seed         # SEED_DEMO=true в .env добавит демо-данные
 npm run start:dev
 ```
+
+> Разработка теперь требует сети. Это прямая плата за переезд: файловая
+> SQLite поднималась из ничего и работала в самолёте, Postgres — нет.
 
 Для локальной разработки без реального Telegram-бота оставьте
 `TELEGRAM_SKIP_AUTH_VALIDATION=true` в `backend/.env` — фронтенд в браузере
@@ -326,8 +333,8 @@ UTC-суток, в которых считаются дни).
 которого бота удалили, гасится по `my_chat_member`; чат, ответивший `403`, гасит
 себя сам при следующей сверке, никого при этом не помечая заблокировавшим бота.
 
-Фронтенд и API живут **в одном проекте Vercel**, база — в **Turso** (SQLite
-as a service). Ни один из сервисов не требует карты.
+Фронтенд и API живут **в одном проекте Vercel**, база — в **Supabase**
+(PostgreSQL as a service). Ни один из сервисов не требует карты.
 
 Боевой адрес: **https://lifestreak.vercel.app**
 
@@ -367,23 +374,57 @@ Vercel собирает файлы в `api/` сам, через esbuild, а то
 > ломался при каждой смене версии Vercel CLI на билд-машине, а на CLI 58
 > перестал собирать бэкенд с рабочими зависимостями вообще.
 
-### 1. База данных в Turso
+### 1. База данных в Supabase
 
-Создайте аккаунт на [turso.tech](https://turso.tech) (вход через GitHub) и
-базу. Понадобятся **URL базы** (`libsql://<db>-<org>.turso.io`) и **auth
-token**.
+Создайте проект на [supabase.com](https://supabase.com). В **Connect** есть
+две строки подключения, и путать их нельзя:
 
-Примените схему и справочные данные — обе команды идемпотентны:
+| | порт | параметры | кто использует |
+|---|---|---|---|
+| `DATABASE_URL` | `6543` (transaction pooler) | `pgbouncer=true&connection_limit=1&connect_timeout=15` | приложение |
+| `DIRECT_URL` | `5432` (session) | `connect_timeout=15&connection_limit=1&pool_timeout=30` | `prisma migrate`, сид, импорт |
+
+Каждый запрос обслуживает отдельный вызов serverless-функции, и функция,
+открывающая собственное соединение с Postgres, исчерпает сервер задолго до
+процессора. Пулер выдаёт соединение на транзакцию, а не на клиента — только
+такая форма это переживает. Миграции наоборот берут advisory-локи и гоняют
+DDL, чего через транзакционный пулер сделать нельзя, поэтому им нужен `5432`.
+
+Хвосты у обеих строк — не перестраховка, а два измеренных отказа:
+
+- **`connect_timeout=15`.** TCP до пулера отвечает за 1 мс, а рукопожатие
+  Postgres занимает 2–3.5 секунды при дефолте Prisma в 5. С дефолтом
+  соединения рвались в 8 случаях из 10, и выглядело это как «база недоступна»
+  при полностью открытом порте.
+- **`connection_limit=1` на `DIRECT_URL`.** Без него Prisma открывает по
+  соединению на ядро (здесь тринадцать) к сессионному пулеру, которому столько
+  не нужно, и скрипт падает с `P2024` ещё до первого запроса.
+
+Схему и справочные данные — обе команды идемпотентны:
 
 ```bash
 cd backend
-DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run db:migrate
-DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npm run prisma:seed
+DATABASE_URL="postgresql://...6543/postgres?pgbouncer=true&connection_limit=1" \
+DIRECT_URL="postgresql://...5432/postgres" npm run db:migrate
+DIRECT_URL="postgresql://...5432/postgres" npm run prisma:seed
 ```
 
-`db:migrate` (`scripts/apply-schema.mjs`) прогоняет `prisma/migrations/*` и
-отмечает применённое в таблице `_schema_migrations`. Обычный
-`prisma migrate deploy` здесь не подходит — он не работает с `libsql://`.
+**Перенос старой базы Turso** (разовый, `scripts/import-from-turso.mjs`):
+
+```bash
+TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." \
+DIRECT_URL="postgresql://...5432/postgres" npm run db:import
+```
+
+Строки идут как есть, в порядке внешних ключей, с сохранением исходных cuid —
+иначе развалились бы все ссылки. Переводятся только типы, которых у SQLite
+нет: булевы `0/1` и даты, лежащие там ISO-строками. Скрипт отказывается
+работать по непустой базе и в конце сверяет число строк в каждой таблице —
+молчаливый успех у такого скрипта не стоит ничего.
+
+> `@libsql/client` остался в `devDependencies` ровно ради этого скрипта. Когда
+> перенос сделан и старая база больше не нужна — зависимость и скрипт можно
+> удалить одним коммитом.
 
 ### 2. Проект на Vercel
 
@@ -397,8 +438,8 @@ npx vercel --prod
 
 | Переменная | Значение |
 |---|---|
-| `DATABASE_URL` | `libsql://<db>-<org>.turso.io` |
-| `TURSO_AUTH_TOKEN` | токен из Turso |
+| `DATABASE_URL` | строка пулера Supabase, `:6543`, с `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | строка сессии Supabase, `:5432` — только для миграций |
 | `JWT_SECRET` | случайная строка от 32 символов |
 | `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
 | `TELEGRAM_SKIP_AUTH_VALIDATION` | `false` |
@@ -427,8 +468,14 @@ curl https://lifestreak.vercel.app/api/v1/health
 > **Миграции — вручную, до деплоя.** Автоматического хука нет намеренно:
 > миграция по боевой базе не должна зависеть от того, дособрался ли билд.
 > Меняли схему — сначала `npm run db:migrate` по проду, потом пуш, иначе
-> новый код придёт на старую схему. Скрипт идемпотентен, лишний запуск
+> новый код придёт на старую схему. Команда идемпотентна, лишний запуск
 > ничего не сломает.
+
+> **Бесплатный Supabase засыпает через неделю без запросов.** Проект не
+> удаляется, но перестаёт отвечать до ручного запуска из панели. Здесь это
+> покрыто само собой: крон `/api/v1/cron/digest` ходит в базу каждый вечер,
+> так что неделя тишины физически не наступает. Если крон когда-нибудь
+> выключат — это первое, что сломается, и сломается молча.
 
 > **Проверять деплой до промоушена.** `npx vercel deploy --prod --skip-domain`
 > собирает с боевыми переменными, но не переключает домен; после проверки —

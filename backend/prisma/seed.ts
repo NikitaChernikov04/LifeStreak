@@ -1,18 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
-import { createClient } from '@libsql/client';
 import { ACHIEVEMENT_CATALOG } from '../src/modules/achievements/achievement-catalog';
 import { STREAK_TEMPLATES, nextGoalFor } from '../src/modules/streaks/templates/streak-templates';
-import { resolveDatabaseUrl } from '../src/prisma/resolve-database-url';
 
-// Uses the same libsql driver adapter as the running app (see PrismaService)
-// so `npm run prisma:seed` works identically against a local file and a real
-// Turso database.
-const libsql = createClient({
-  url: resolveDatabaseUrl(process.env.DATABASE_URL ?? 'file:./dev.db'),
-  authToken: process.env.TURSO_AUTH_TOKEN,
+// Seeding writes DDL-free but long-running upserts, and runs from a shell
+// rather than a serverless function — so it goes through DIRECT_URL when one
+// is set, the same connection `prisma migrate` uses, instead of taking a slot
+// in the pooler meant for live requests.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
 });
-const prisma = new PrismaClient({ adapter: new PrismaLibSQL(libsql) });
 
 const CHALLENGE_TEMPLATES = [
   { title: 'Прочитай 20 страниц', description: 'Открой книгу и прочитай хотя бы 20 страниц', icon: '📖', xpReward: 40, rewardType: 'XP' as const },

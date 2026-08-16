@@ -26,6 +26,15 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
   }
   if (!env.DATABASE_URL) {
     problems.push('DATABASE_URL is not set');
+  } else if (!env.DATABASE_URL.includes('pgbouncer=true')) {
+    // Pointing production at the direct Postgres port is the one database
+    // misconfiguration that looks fine in testing. It survives a smoke check
+    // and a quiet evening, then starts throwing "prepared statement already
+    // exists" the first time two people mark a day at once — which reads like
+    // an application bug and is not one.
+    problems.push(
+      'DATABASE_URL is missing pgbouncer=true — production must use the transaction pooler (:6543), not a direct connection',
+    );
   }
 
   if (problems.length > 0) {

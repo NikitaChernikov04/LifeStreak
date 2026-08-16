@@ -2,8 +2,10 @@ export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   database: {
-    url: process.env.DATABASE_URL, // libsql://<db>-<org>.turso.io in prod, file:./prisma/dev.db locally
-    authToken: process.env.TURSO_AUTH_TOKEN,
+    // Pooled connection (:6543) — what the app serves requests on.
+    url: process.env.DATABASE_URL,
+    // Session connection (:5432) — migrations and seeding only, never the app.
+    directUrl: process.env.DIRECT_URL,
   },
   jwt: {
     secret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
