@@ -8,6 +8,8 @@ import { CreateStreakDialog } from '@/components/streaks/CreateStreakDialog';
 import { FirstRun } from '@/components/streaks/FirstRun';
 import { GoalCard } from '@/components/goals/GoalCard';
 import { VersusCard } from '@/components/goals/VersusCard';
+import { GoalArchive } from '@/components/goals/GoalArchive';
+import { isGoalClosed } from '@/lib/goals';
 import { CreateGoalDialog } from '@/components/goals/CreateGoalDialog';
 import { ShareCardModal } from '@/components/share/ShareCardModal';
 import { useStreaks } from '@/hooks/useStreaks';
@@ -23,7 +25,12 @@ export function HomePage() {
 
   // Goals people hold together are marked on the same screen as personal
   // ones — the day is recorded in one sitting, not in two places.
-  const openGoals = goals?.filter((goal) => goal.status !== 'ABANDONED') ?? [];
+  const visibleGoals = goals?.filter((goal) => goal.status !== 'ABANDONED') ?? [];
+  // Anything finished is folded into the archive at the foot of the page: it
+  // has no action left on it, and a full block each meant scrolling past dead
+  // panels to reach a live one.
+  const openGoals = visibleGoals.filter((goal) => !isGoalClosed(goal));
+  const closedGoals = visibleGoals.filter(isGoalClosed);
   // Held-together and competed-over are different promises and get their own
   // headings. Mixing them would put two different meanings of "N из M" under
   // one title.
@@ -116,6 +123,8 @@ export function HomePage() {
       <div className="mt-6">
         <CreateGoalDialog />
       </div>
+
+      <GoalArchive goals={closedGoals} />
 
       <ShareCardModal streak={shareStreak} onOpenChange={(open) => !open && setShareStreak(null)} />
     </Sheet>
