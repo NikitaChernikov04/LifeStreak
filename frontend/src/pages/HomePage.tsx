@@ -5,6 +5,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { DailyChallengeCard } from '@/components/challenges/DailyChallengeCard';
 import { StreakCard } from '@/components/streaks/StreakCard';
 import { CreateStreakDialog } from '@/components/streaks/CreateStreakDialog';
+import { FirstRun } from '@/components/streaks/FirstRun';
 import { GoalCard } from '@/components/goals/GoalCard';
 import { VersusCard } from '@/components/goals/VersusCard';
 import { CreateGoalDialog } from '@/components/goals/CreateGoalDialog';
@@ -31,18 +32,23 @@ export function HomePage() {
 
   if (!user) return null;
 
+  // Nothing recorded yet: the whole sheet becomes one decision. Everything the
+  // normal screen offers — the challenge, shared goals, bets — is worth
+  // nothing to somebody who has not started, and measurably costs the start.
+  // Waits for the list to actually arrive, so a slow network never flashes the
+  // beginner's screen at somebody with forty-six days behind them.
+  if (!isLoading && streaks?.length === 0) {
+    return <FirstRun user={user} />;
+  }
+
   return (
     <Sheet>
       <TopBar user={user} />
 
-      <div className="mt-6">
-        <DailyChallengeCard />
-      </div>
-
       {/* Section gaps are deliberately much larger than the gaps inside a
           section. When both were the same, a new section and the next entry
           announced themselves identically and the page read as one long list. */}
-      <FieldHeading className="mt-10" count={streaks?.length ? `${streaks.length}` : undefined}>
+      <FieldHeading className="mt-8" count={streaks?.length ? `${streaks.length}` : undefined}>
         Серии
       </FieldHeading>
 
@@ -69,6 +75,15 @@ export function HomePage() {
 
       <div className="mt-6">
         <CreateStreakDialog />
+      </div>
+
+      {/* Below the record, not above it. The challenge is a slip pasted into
+          the journal — a side quest that pays XP — and it used to open the
+          page as the largest and only coloured thing on it. To somebody who
+          had just created their first streak it sat above that streak and
+          competed with the one press the whole product depends on. */}
+      <div className="mt-10">
+        <DailyChallengeCard />
       </div>
 
       <FieldHeading className="mt-10" count={heldGoals.length > 0 ? `${heldGoals.length}` : undefined}>

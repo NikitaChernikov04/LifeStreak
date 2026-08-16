@@ -10,7 +10,7 @@ import type { StreakTemplate } from '@/types/api';
 const MAX_STARTING_COUNT = 3650;
 
 /** Creating a streak is filling in a blank form: labelled fields, ruled input, no chrome. */
-export function CreateStreakDialog() {
+export function CreateStreakDialog({ triggerLabel }: { triggerLabel?: string } = {}) {
   const [open, setOpen] = useState(false);
   const { data: templates } = useStreakTemplates();
   const createStreak = useCreateStreak();
@@ -67,7 +67,7 @@ export function CreateStreakDialog() {
     >
       <DialogTrigger asChild>
         <Button variant="outline" className="w-full">
-          Новая серия
+          {triggerLabel ?? 'Новая серия'}
         </Button>
       </DialogTrigger>
 
