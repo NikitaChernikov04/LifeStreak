@@ -331,6 +331,7 @@ export interface GroupGoal {
   status: GroupGoalStatus;
   ownerId: string;
   isOwner: boolean;
+  createdAt: string;
   completedAt: string | null;
   myStatus: GroupMemberStatus | null;
   markedToday: boolean;

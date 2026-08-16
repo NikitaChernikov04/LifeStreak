@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ClosedGoalSheet } from '@/components/goals/ClosedGoalSheet';
 import { goalOutcome } from '@/lib/goals';
 import { cn } from '@/lib/utils';
 import type { GroupGoal } from '@/types/api';
@@ -23,6 +24,8 @@ import type { GroupGoal } from '@/types/api';
  */
 export function GoalArchive({ goals }: { goals: GroupGoal[] }) {
   const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState<string | null>(null);
+  const showing = goals.find((g) => g.id === opened) ?? null;
   if (goals.length === 0) return null;
 
   return (
@@ -53,30 +56,46 @@ export function GoalArchive({ goals }: { goals: GroupGoal[] }) {
             className="overflow-hidden"
           >
             {goals.map((goal) => (
-              <li
-                key={goal.id}
-                className="flex items-center gap-3 border-b border-ink/10 py-3 last:border-b-0"
-              >
-                <span
-                  aria-hidden
-                  className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm opacity-60"
-                  style={{ borderColor: goal.color, backgroundColor: `${goal.color}14` }}
+              <li key={goal.id} className="border-b border-ink/10 last:border-b-0">
+                {/* The line opens. Folding a goal away should put it out of the
+                    way, not out of reach — the reason to hold something for
+                    thirty days is that afterwards you can look at what it was. */}
+                <button
+                  onClick={() => setOpened(goal.id)}
+                  className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-ink/[0.03]"
                 >
-                  {goal.icon}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-[0.9375rem] uppercase leading-tight tracking-[0.04em] text-ink-soft">
-                    {goal.title}
+                  <span
+                    aria-hidden
+                    className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm opacity-60"
+                    style={{ borderColor: goal.color, backgroundColor: `${goal.color}14` }}
+                  >
+                    {goal.icon}
                   </span>
-                  <span className="mt-0.5 block truncate font-mono text-micro uppercase text-graphite">
-                    {goalOutcome(goal)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-[0.9375rem] uppercase leading-tight tracking-[0.04em] text-ink-soft">
+                      {goal.title}
+                    </span>
+                    <span className="mt-0.5 block truncate font-mono text-micro uppercase text-graphite">
+                      {goalOutcome(goal)}
+                    </span>
                   </span>
-                </span>
+                  <span aria-hidden className="shrink-0 font-mono text-micro text-graphite">
+                    ›
+                  </span>
+                </button>
               </li>
             ))}
           </motion.ul>
         )}
       </AnimatePresence>
+
+      {showing && (
+        <ClosedGoalSheet
+          goal={showing}
+          open
+          onOpenChange={(v) => !v && setOpened(null)}
+        />
+      )}
     </section>
   );
 }

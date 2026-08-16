@@ -948,6 +948,10 @@ export class GoalsService {
       status: goal.status,
       ownerId: goal.ownerId,
       isOwner: goal.ownerId === viewerId,
+      // Both ends of the thing, because a goal that is over is read as a
+      // record: "held from the fifth to the twenty-fourth" is most of what is
+      // left to say about it.
+      createdAt: goal.createdAt,
       completedAt: goal.completedAt,
       myStatus: viewer?.status ?? null,
       markedToday: markedToday.has(viewerId),
