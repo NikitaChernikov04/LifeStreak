@@ -1,10 +1,15 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * "Журнал наблюдений" — the app is a squared-paper notebook you keep on
- * yourself. Paper is warm cream and ruled; ink is the only voice that carries
- * weight; ochre marks everything the user has earned; vermilion is reserved
- * exclusively for breaks in the record, never for decoration.
+ * "Журнал наблюдений" — the app is a notebook you keep on yourself. Paper is
+ * warm cream with the tooth of uncoated stock and one margin rule down the
+ * left; ink is the only voice that carries weight; ochre marks everything the
+ * user has earned; vermilion is reserved exclusively for breaks in the record,
+ * never for decoration.
+ *
+ * The page carries exactly one ruling, and it belongs to the content. An
+ * earlier version printed a 22px square grid behind everything, which drew a
+ * rhythm at the same spatial frequency as the type and lined up with nothing.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -26,10 +31,10 @@ export default {
       colors: {
         paper: {
           DEFAULT: 'hsl(var(--paper))',
+          lit: 'hsl(var(--paper-lit))',
           edge: 'hsl(var(--paper-edge))',
           sunk: 'hsl(var(--paper-sunk))',
         },
-        grid: 'hsl(var(--grid))',
         ink: {
           DEFAULT: 'hsl(var(--ink))',
           soft: 'hsl(var(--ink-soft))',

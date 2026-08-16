@@ -4,13 +4,16 @@
 
 @layer base {
   :root {
-    /* Paper — warm cream stock, the colour of aged squared-paper notebooks.
-       Held at 93% lightness so ink has somewhere to sit and the grid stays
-       legible without turning the page grey. */
-    --paper: 46 38% 93%;
-    --paper-edge: 45 33% 90%;
-    --paper-sunk: 44 28% 85%;
-    --grid: 42 20% 74%;
+    /* Paper — warm cream stock. Lighter and a little less yellow than the
+       squared-paper version it replaces: that cream was pitched to keep a
+       printed grid legible, and without the grid the same value just reads
+       dingy. This one is the colour of good uncoated stock, not old newsprint.
+       --paper-lit is the same sheet catching light near the top of the screen;
+       --paper-edge is a half-step down, the ground for anything recessed. */
+    --paper: 44 32% 94%;
+    --paper-lit: 46 44% 96%;
+    --paper-edge: 44 26% 91%;
+    --paper-sunk: 43 22% 86%;
 
     /* Ink — the only voice with weight. Warm black, not neutral: on cream a
        neutral black reads blue. */
@@ -27,7 +30,11 @@
     /* Ochre marks everything earned: hearts, rewards, milestone days. */
     --ochre: 33 48% 44%;
 
-    --grid-size: 22px;
+    /* The margin rule: how far the left edge of every sheet sits from the
+       screen, and how far the writing sits from the rule. Declared here
+       because headings, entries and the rule itself must all agree. */
+    --margin-rule: 1rem;
+    --margin-gutter: 0.5rem;
   }
 
   html,
@@ -38,23 +45,36 @@
 
   body {
     @apply bg-paper font-sans text-ink antialiased;
-    /* The page is ruled paper. Both rules are drawn from the same token so the
-       sheet never looks printed on top of a different surface. */
-    background-image:
-      repeating-linear-gradient(
-        to right,
-        hsl(var(--grid) / 0.26) 0 1px,
-        transparent 1px var(--grid-size)
-      ),
-      repeating-linear-gradient(
-        to bottom,
-        hsl(var(--grid) / 0.26) 0 1px,
-        transparent 1px var(--grid-size)
-      );
-    background-position: 0 0;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
     text-rendering: optimizeLegibility;
+  }
+
+  /**
+   * The sheet itself: light falling across the top of the page, and the tooth
+   * of the stock over all of it.
+   *
+   * Both are deliberately frequency-free. The grid this replaces failed not
+   * because it was a grid but because it drew a 22px rhythm behind 10px type
+   * and never lined up with a single entry, so the page read as misprinted.
+   * Noise has no rhythm to beat against the text, and the bloom is one soft
+   * gradient across the whole viewport. Fixed, so the paper stays still while
+   * the writing scrolls over it — which is what paper does.
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23t)' opacity='0.05'/%3E%3C/svg%3E"),
+      radial-gradient(125% 55% at 50% -8%, hsl(var(--paper-lit)) 0%, transparent 68%);
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
   }
 
   ::selection {
@@ -97,6 +117,49 @@
   /* A stamped-on status, not a button: bordered, small caps, never filled. */
   .chip {
     @apply inline-flex items-center gap-1 whitespace-nowrap border border-ink/30 px-2 py-1 font-mono text-micro uppercase text-graphite;
+  }
+
+  /**
+   * A quiet action inside an entry — "вырезка", "в архив".
+   *
+   * These used to be set exactly like the reading beside them: the same mono
+   * micro caps in the same grey. So "ДО СЕРДЦА 3 · ВЕХА 50 ВЫРЕЗКА В АРХИВ"
+   * ran together as one line of text, and nothing said which two words could
+   * be pressed — or that they were two words rather than a phrase. A pen
+   * underline is what marks a word as actionable on paper, so that is the
+   * affordance: dotted, so it never competes with a real button.
+   */
+  .entry-action {
+    @apply border-b border-dotted border-ink/40 pb-px font-mono text-micro uppercase text-ink-soft transition-colors hover:border-ink hover:text-ink;
+  }
+
+  /**
+   * One entry in the journal: your own record, ruled off from the next.
+   * Deliberately not boxed — these are lines on a page, and boxing them would
+   * make a personal streak look like the same kind of object as an agreement
+   * with somebody else.
+   */
+  .entry {
+    @apply border-b border-ink/15 py-5;
+  }
+
+  /**
+   * A pact: something held with another person — a shared goal, a bet.
+   *
+   * Boxed and sunk into the page precisely because it is *not* an entry. Your
+   * streaks are yours to write; these have someone else in them, and the page
+   * should not pretend the two are the same material.
+   *
+   * Named `pact` rather than the obvious `block` because Tailwind already owns
+   * `.block` for `display: block`, and the two would fight inside any element
+   * that also wanted `flex`.
+   */
+  .pact {
+    @apply border border-ink/20 bg-paper-edge p-4;
+    /* A shadow drawn as a printed offset rather than a blur: the sheet has no
+       depth, so the block reads as a card laid on it, not as a floating
+       surface. One pixel is enough to separate it from the page. */
+    box-shadow: 2px 2px 0 hsl(var(--ink) / 0.06);
   }
 
   /* Dialogs animate as paper being laid down, not as a modal fading in. */

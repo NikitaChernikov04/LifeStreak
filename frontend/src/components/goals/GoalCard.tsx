@@ -17,6 +17,10 @@ import type { GroupGoal } from '@/types/api';
  * A goal several people hold at once. The card's job is to answer one question
  * before any other: is today done, and if not, by whom. Everything else — the
  * count, the target, the rescue — is subordinate to that.
+ *
+ * Boxed and sunk into the page, unlike a personal streak, which is ruled off
+ * as an entry. That is not variety for its own sake: a streak is something you
+ * write in your own journal, and this is a promise with another person in it.
  */
 export function GoalCard({ goal }: { goal: GroupGoal }) {
   // Both destructive-ish actions ask twice, and only one of them may be asking
@@ -38,61 +42,43 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex gap-3 border-b border-ink/15 py-4"
+      className="pact mt-3"
     >
-      <div
-        className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border text-lg"
-        style={{ borderColor: goal.color, backgroundColor: `${goal.color}1F` }}
-      >
-        {goal.icon}
-      </div>
+      {/* The title gets the full measure and is allowed to wrap. It used to
+          share a row with the day's button and truncate to "ЧИТАЕМ КА…" — the
+          name is how you know which goal this is, and it was the first thing
+          sacrificed. */}
+      <div className="flex items-start gap-3">
+        <div
+          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border text-lg"
+          style={{ borderColor: goal.color, backgroundColor: `${goal.color}1F` }}
+        >
+          {goal.icon}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          {/* The refresh sits with the title because that is the thing being
-              refreshed — whether the others have closed their day. */}
-          <div className="flex min-w-0 items-center gap-1.5">
-            <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-1.5">
+            <h3 className="min-w-0 font-display text-lg uppercase leading-tight tracking-[0.05em]">
               {goal.title}
             </h3>
+            {/* The refresh sits with the title because that is the thing being
+                refreshed — whether the others have closed their day. */}
             <RefreshButton />
           </div>
 
-          {done ? (
-            <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Выполнена</span>
-          ) : invited ? (
-            <Button
-              size="sm"
-              className="mt-0.5 shrink-0"
-              disabled={join.isPending}
-              onClick={() => join.mutate(goal.id)}
-            >
-              Вступить
-            </Button>
-          ) : goal.markedToday ? (
-            <span className="chip mt-0.5 shrink-0">✓ День отмечен</span>
-          ) : (
-            <Button
-              size="sm"
-              className="mt-0.5 shrink-0"
-              disabled={checkin.isPending}
-              onClick={() => checkin.mutate({ goal })}
-            >
-              Отметить день
-            </Button>
-          )}
+          <p className="mt-1 font-mono text-micro uppercase text-graphite">
+            держим вместе · <span className="figure">{goal.currentCount}</span> из {goal.targetDays}{' '}
+            {pluralizeDays(goal.targetDays)}
+          </p>
         </div>
 
-        {/* Below the button rather than beside it: the count is a full line of
-            text, and sharing a row with a button leaves it wrapping three times
-            on a 320px screen. */}
-        <p className="mt-0.5 font-mono text-micro uppercase text-graphite">
-          держим вместе · <span className="figure">{goal.currentCount}</span> из {goal.targetDays}{' '}
-          {pluralizeDays(goal.targetDays)}
-        </p>
+        {done && <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Выполнена</span>}
+      </div>
+
+      <div className="mt-3">
 
         {/* Progress towards the finish line, drawn as a measured scale. */}
-        <div className="mt-3 h-2 w-full border border-ink/25">
+        <div className="h-2 w-full border border-ink/25">
           <div
             className="h-full"
             style={{ width: `${progress}%`, backgroundColor: done ? undefined : goal.color }}
@@ -134,12 +120,53 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
           </p>
         )}
 
-        <div className="mt-2 flex flex-wrap items-center justify-end gap-3 font-mono text-micro uppercase">
+        {/* Who the group is still waiting for. A reading, so it belongs above
+            the actions rather than stranded underneath them. */}
+        {waiting.length > 0 && !done && !invited && (
+          <p className="mt-2.5 font-mono text-micro uppercase text-graphite">
+            ждём: {waiting.map((m) => m.firstName).join(', ')}
+          </p>
+        )}
+
+        {/* The day's action gets the full width at the foot of the block. In an
+            entry the button can sit inline, because an entry is one line of a
+            list; a pact is a panel, and the thing you opened it to press should
+            not be competing with the title for horizontal space. */}
+        {!done && (
+          <div className="mt-4">
+            {invited ? (
+              <Button
+                className="w-full"
+                disabled={join.isPending}
+                onClick={() => join.mutate(goal.id)}
+              >
+                Вступить
+              </Button>
+            ) : goal.markedToday ? (
+              <p className="border border-ink/20 py-2 text-center font-mono text-micro uppercase text-graphite">
+                ✓ День отмечен
+              </p>
+            ) : (
+              <Button
+                className="w-full"
+                disabled={checkin.isPending}
+                onClick={() => checkin.mutate({ goal })}
+              >
+                Отметить день
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Secondary actions, ruled off from everything above and set with the
+            same underline an entry uses, so "a word you can press" looks the
+            same everywhere in the app. */}
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-ink/15 pt-3 font-mono text-micro uppercase">
           {goal.canRescue && (
             <button
               onClick={() => rescue.mutate(goal.id)}
               disabled={rescue.isPending}
-              className="text-vermilion underline underline-offset-2 disabled:opacity-50"
+              className="entry-action mr-auto border-vermilion/50 text-vermilion hover:border-vermilion hover:text-vermilion disabled:opacity-50"
             >
               Спасти вчера · 1 сердце
             </button>
@@ -156,10 +183,9 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
               onBlur={() => setConfirming(null)}
               disabled={complete.isPending}
               className={cn(
-                'uppercase transition-colors hover:text-ink disabled:opacity-50',
-                confirming === 'complete'
-                  ? 'text-ochre underline underline-offset-2'
-                  : 'text-graphite',
+                'entry-action disabled:opacity-50',
+                confirming === 'complete' &&
+                  'border-ochre text-ochre hover:border-ochre hover:text-ochre',
               )}
             >
               {confirming === 'complete' ? 'Точно выполнена?' : 'Цель выполнена'}
@@ -173,10 +199,9 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
               }
               onBlur={() => setConfirming(null)}
               className={cn(
-                'uppercase transition-colors hover:text-ink',
-                confirming === 'leave'
-                  ? 'text-vermilion underline underline-offset-2'
-                  : 'text-graphite',
+                'entry-action',
+                confirming === 'leave' &&
+                  'border-vermilion text-vermilion hover:border-vermilion hover:text-vermilion',
               )}
             >
               {confirming === 'leave'
@@ -191,12 +216,6 @@ export function GoalCard({ goal }: { goal: GroupGoal }) {
             </button>
           )}
         </div>
-
-        {waiting.length > 0 && !done && !invited && (
-          <p className="mt-1 text-right font-mono text-micro uppercase text-graphite">
-            ждём: {waiting.map((m) => m.firstName).join(', ')}
-          </p>
-        )}
       </div>
     </motion.article>
   );

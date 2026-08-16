@@ -107,59 +107,46 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex gap-3 border-b border-ink/15 py-4"
+      className="pact mt-3"
     >
-      <div
-        className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border text-lg"
-        style={{ borderColor: goal.color, backgroundColor: `${goal.color}1F` }}
-      >
-        {goal.icon}
-      </div>
+      {/* Full measure for the title, which used to truncate to "КТО ДОЛЬШ…"
+          because the day's button shared its row. */}
+      <div className="flex items-start gap-3">
+        <div
+          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border text-lg"
+          style={{ borderColor: goal.color, backgroundColor: `${goal.color}1F` }}
+        >
+          {goal.icon}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          {/* The refresh sits with the title because that is the thing being
-              refreshed — the other side's marks and proofs. */}
-          <div className="flex min-w-0 items-center gap-1.5">
-            <h3 className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-[0.05em]">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-1.5">
+            <h3 className="min-w-0 font-display text-lg uppercase leading-tight tracking-[0.05em]">
               {goal.title}
             </h3>
+            {/* The refresh sits with the title because that is the thing being
+                refreshed — the other side's marks and proofs. */}
             <RefreshButton />
           </div>
 
-          {done ? (
-            <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Спор закрыт</span>
-          ) : invited ? (
-            <Button
-              size="sm"
-              className="mt-0.5 shrink-0"
-              disabled={join.isPending}
-              onClick={() => join.mutate(goal.id)}
-            >
-              Спорим
-            </Button>
-          ) : goal.markedToday ? (
-            <span className="chip mt-0.5 shrink-0">✓ День отмечен</span>
-          ) : (
-            <Button size="sm" className="mt-0.5 shrink-0" disabled={busy} onClick={mark}>
-              {squeezing ? 'Сжимаю…' : 'Отметить день'}
-            </Button>
-          )}
+          <p className="mt-1 font-mono text-micro uppercase text-graphite">
+            спор · спринт <span className="figure">{versus.sprintNumber}</span> из{' '}
+            {versus.sprintCount}
+            {!done && (
+              <>
+                {' · '}день <span className="figure">{versus.dayInSprint}</span> из{' '}
+                {versus.sprintDays}
+              </>
+            )}
+          </p>
         </div>
 
-        <p className="mt-0.5 font-mono text-micro uppercase text-graphite">
-          спор · спринт <span className="figure">{versus.sprintNumber}</span> из{' '}
-          {versus.sprintCount}
-          {!done && (
-            <>
-              {' · '}день <span className="figure">{versus.dayInSprint}</span> из{' '}
-              {versus.sprintDays}
-            </>
-          )}
-        </p>
+        {done && <span className="chip mt-0.5 shrink-0 border-ochre text-ochre">✓ Спор закрыт</span>}
+      </div>
 
+      <div className="mt-3">
         {/* Sprints, not days: the same unit the score is kept in. */}
-        <div className="mt-3 h-2 w-full border border-ink/25">
+        <div className="h-2 w-full border border-ink/25">
           <div
             className="h-full"
             style={{ width: `${progress}%`, backgroundColor: done ? undefined : goal.color }}
@@ -281,7 +268,32 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
           </div>
         )}
 
-        <div className="mt-2 flex flex-wrap items-center justify-end gap-3 font-mono text-micro uppercase">
+        {/* The day's action, full width at the foot of the block — the same
+            place it sits in a shared goal, so the two kinds of pact are
+            operated the same way. */}
+        {!done && (
+          <div className="mt-4">
+            {invited ? (
+              <Button
+                className="w-full"
+                disabled={join.isPending}
+                onClick={() => join.mutate(goal.id)}
+              >
+                Спорим
+              </Button>
+            ) : goal.markedToday ? (
+              <p className="border border-ink/20 py-2 text-center font-mono text-micro uppercase text-graphite">
+                ✓ День отмечен
+              </p>
+            ) : (
+              <Button className="w-full" disabled={busy} onClick={mark}>
+                {squeezing ? 'Сжимаю…' : 'Отметить день'}
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-ink/15 pt-3 font-mono text-micro uppercase">
           {!done && goal.myStatus === 'JOINED' && (
             <button
               onClick={() =>
@@ -290,10 +302,9 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
               onBlur={() => setConfirming(null)}
               disabled={complete.isPending}
               className={cn(
-                'uppercase transition-colors hover:text-ink disabled:opacity-50',
-                confirming === 'complete'
-                  ? 'text-ochre underline underline-offset-2'
-                  : 'text-graphite',
+                'entry-action disabled:opacity-50',
+                confirming === 'complete' &&
+                  'border-ochre text-ochre hover:border-ochre hover:text-ochre',
               )}
             >
               {confirming === 'complete' ? 'Точно закрыть?' : 'Спор окончен'}
@@ -307,10 +318,9 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
               }
               onBlur={() => setConfirming(null)}
               className={cn(
-                'uppercase transition-colors hover:text-ink',
-                confirming === 'leave'
-                  ? 'text-vermilion underline underline-offset-2'
-                  : 'text-graphite',
+                'entry-action',
+                confirming === 'leave' &&
+                  'border-vermilion text-vermilion hover:border-vermilion hover:text-vermilion',
               )}
             >
               {confirming === 'leave'
@@ -331,45 +341,62 @@ export function VersusCard({ goal }: { goal: GroupGoal }) {
 }
 
 /**
- * The score. Sprints taken on the right, because that is the standing;
- * the current sprint in the middle, because that is what is still moving.
+ * The score, as a table that explains itself.
+ *
+ * It used to carry a line underneath reading "справа — взятые спринты". A
+ * legend explaining your own two columns is an admission that the columns are
+ * unlabelled, so they are labelled now and the legend is gone. Sprints taken
+ * sit rightmost because that is the standing; the current sprint sits beside
+ * them because that is the part still moving.
  */
 function Standings({ versus }: { versus: VersusView }) {
   const draws = versus.standings[0]?.sprintsDrawn ?? 0;
 
   return (
-    <>
-      <div className="mt-2.5 border-y border-ink/15">
-        {versus.standings.map((person) => (
-          <div
-            key={person.id}
-            className="flex items-baseline justify-between gap-2 border-b border-ink/10 py-1.5 font-mono text-micro uppercase last:border-b-0"
-          >
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span
-                aria-hidden
-                className={person.markedToday ? 'text-ink' : 'text-vermilion'}
-                title={person.markedToday ? 'сегодня отмечено' : 'сегодня ещё нет'}
-              >
-                {person.markedToday ? '✓' : '·'}
-              </span>
-              <span className="truncate">{person.isMe ? 'ты' : person.firstName}</span>
-            </span>
-
-            <span className="flex shrink-0 items-baseline gap-3 text-graphite">
-              <span>
-                <span className="figure">{person.daysThisSprint}</span>/{versus.sprintDays}
-              </span>
-              <span className="figure text-[1.0625rem] text-ink">{person.sprintsWon}</span>
-            </span>
-          </div>
-        ))}
+    <div className="mt-3">
+      <div className="flex items-baseline justify-between gap-2 border-b border-ink/20 pb-1 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-graphite">
+        <span>кто</span>
+        <span className="flex shrink-0 items-baseline gap-3">
+          <span>спринт</span>
+          <span className="w-6 text-right">взято</span>
+        </span>
       </div>
 
-      <p className="mt-1 font-mono text-micro uppercase text-graphite">
-        справа — взятые спринты{draws > 0 ? ` · ничьих ${draws}` : ''}
-      </p>
-    </>
+      {versus.standings.map((person) => (
+        <div
+          key={person.id}
+          className="flex items-baseline justify-between gap-2 border-b border-ink/10 py-2 font-mono text-micro uppercase last:border-b-0"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden
+              className={person.markedToday ? 'text-ink' : 'text-vermilion'}
+              title={person.markedToday ? 'сегодня отмечено' : 'сегодня ещё нет'}
+            >
+              {person.markedToday ? '✓' : '·'}
+            </span>
+            <span className={cn('truncate', person.isMe && 'text-ink')}>
+              {person.isMe ? 'ты' : person.firstName}
+            </span>
+          </span>
+
+          <span className="flex shrink-0 items-baseline gap-3 text-graphite">
+            <span>
+              <span className="figure">{person.daysThisSprint}</span>/{versus.sprintDays}
+            </span>
+            <span className="figure w-6 text-right text-[1.0625rem] text-ink">
+              {person.sprintsWon}
+            </span>
+          </span>
+        </div>
+      ))}
+
+      {draws > 0 && (
+        <p className="mt-1.5 font-mono text-micro uppercase text-graphite">
+          ничьих <span className="figure">{draws}</span>
+        </p>
+      )}
+    </div>
   );
 }
 

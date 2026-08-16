@@ -14,8 +14,10 @@ interface StreakCardProps {
 
 /**
  * One observation in the journal. Deliberately not a card: entries are ruled
- * off from each other, so the page reads as a sheet rather than a feed. The
- * streak's own colour appears once, on the icon tile — everything else is ink.
+ * off from each other, so the page reads as a sheet rather than a feed — and
+ * so a run you keep alone stays visibly a different kind of thing from a goal
+ * you hold with somebody, which is boxed. The streak's own colour appears
+ * once, on the icon tile; everything else is ink.
  */
 export function StreakCard({ streak, onShare }: StreakCardProps) {
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -34,7 +36,7 @@ export function StreakCard({ streak, onShare }: StreakCardProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -12 }}
       transition={{ duration: 0.25 }}
-      className="flex gap-3 border-b border-ink/15 py-4"
+      className="entry flex gap-3"
       onDoubleClick={() => onShare?.(streak)}
     >
       {/* The tile is the only place a streak's colour is spent. */}
@@ -107,8 +109,10 @@ export function StreakCard({ streak, onShare }: StreakCardProps) {
         />
 
         {/* Entry footer: the reading on the left, the entry's own controls on the
-            right. Wraps rather than collides when the measure runs out. */}
-        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 font-mono text-micro uppercase">
+            right. The controls are underlined and the reading is not — without
+            that they were the same grey micro caps and ran together as one
+            sentence. Wraps rather than collides when the measure runs out. */}
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 font-mono text-micro uppercase">
           {canRecover ? (
             <p className="text-vermilion">Пропущен вчера · спишется 1 сердце</p>
           ) : (
@@ -117,11 +121,8 @@ export function StreakCard({ streak, onShare }: StreakCardProps) {
             </p>
           )}
 
-          <div className="ml-auto flex items-center gap-3">
-            <button
-              onClick={() => onShare?.(streak)}
-              className="uppercase text-graphite transition-colors hover:text-ink"
-            >
+          <div className="ml-auto flex items-center gap-4">
+            <button onClick={() => onShare?.(streak)} className="entry-action">
               Вырезка
             </button>
             <button
@@ -130,8 +131,8 @@ export function StreakCard({ streak, onShare }: StreakCardProps) {
               }
               onBlur={() => setConfirmingArchive(false)}
               className={cn(
-                'uppercase transition-colors hover:text-ink',
-                confirmingArchive ? 'text-vermilion underline underline-offset-2' : 'text-graphite',
+                'entry-action',
+                confirmingArchive && 'border-vermilion text-vermilion hover:border-vermilion hover:text-vermilion',
               )}
             >
               {confirmingArchive ? 'Точно?' : 'В архив'}

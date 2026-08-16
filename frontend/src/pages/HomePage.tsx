@@ -39,7 +39,10 @@ export function HomePage() {
         <DailyChallengeCard />
       </div>
 
-      <FieldHeading className="mt-8" count={streaks?.length ? `${streaks.length}` : undefined}>
+      {/* Section gaps are deliberately much larger than the gaps inside a
+          section. When both were the same, a new section and the next entry
+          announced themselves identically and the page read as one long list. */}
+      <FieldHeading className="mt-10" count={streaks?.length ? `${streaks.length}` : undefined}>
         Серии
       </FieldHeading>
 
@@ -64,11 +67,11 @@ export function HomePage() {
         )}
       </div>
 
-      <div className="mt-5">
+      <div className="mt-6">
         <CreateStreakDialog />
       </div>
 
-      <FieldHeading className="mt-8" count={heldGoals.length > 0 ? `${heldGoals.length}` : undefined}>
+      <FieldHeading className="mt-10" count={heldGoals.length > 0 ? `${heldGoals.length}` : undefined}>
         Общие цели
       </FieldHeading>
 
@@ -87,7 +90,7 @@ export function HomePage() {
 
       {bets.length > 0 && (
         <>
-          <FieldHeading className="mt-8" count={`${bets.length}`}>
+          <FieldHeading className="mt-10" count={`${bets.length}`}>
             Споры
           </FieldHeading>
 
@@ -99,7 +102,7 @@ export function HomePage() {
         </>
       )}
 
-      <div className="mt-5">
+      <div className="mt-6">
         <CreateGoalDialog />
       </div>
 
