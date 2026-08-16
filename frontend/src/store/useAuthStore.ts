@@ -5,7 +5,14 @@ import type { User } from '@/types/api';
 interface AuthState {
   accessToken: string | null;
   user: User | null;
-  setSession: (accessToken: string, user: User) => void;
+  /**
+   * This session came from the demo entrance rather than from Telegram. Kept
+   * so the app can say so out loud on the profile sheet: a session that is not
+   * yours should never be silent about it, least of all one that survives a
+   * reload.
+   */
+  isDemo: boolean;
+  setSession: (accessToken: string, user: User, isDemo?: boolean) => void;
   setUser: (user: User) => void;
   logout: () => void;
 }
@@ -15,9 +22,10 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       accessToken: null,
       user: null,
-      setSession: (accessToken, user) => set({ accessToken, user }),
+      isDemo: false,
+      setSession: (accessToken, user, isDemo = false) => set({ accessToken, user, isDemo }),
       setUser: (user) => set({ user }),
-      logout: () => set({ accessToken: null, user: null }),
+      logout: () => set({ accessToken: null, user: null, isDemo: false }),
     }),
     { name: 'lifestreak-auth' },
   ),

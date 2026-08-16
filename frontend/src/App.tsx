@@ -8,15 +8,26 @@ import { AchievementsPage } from '@/pages/AchievementsPage';
 import { FriendsPage } from '@/pages/FriendsPage';
 import { UserProfilePage } from '@/pages/UserProfilePage';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useTelegramLogin } from '@/hooks/useAuth';
+import { DEMO_START_PREFIX, useDemoLogin, useTelegramLogin } from '@/hooks/useAuth';
 import { useRedeemInviteFromLink } from '@/hooks/useInvites';
-import { getInitData } from '@/lib/telegram';
+import { getInitData, getStartParam } from '@/lib/telegram';
 
 export default function App() {
   const user = useAuthStore((s) => s.user);
+  const isDemo = useAuthStore((s) => s.isDemo);
   const login = useTelegramLogin();
+  const demoLogin = useDemoLogin();
 
   useEffect(() => {
+    // A demo key in the start parameter wins over whatever session is stored,
+    // so opening the link always lands on the demo rather than on whoever was
+    // signed in last. Without that, the second take of a recording would open
+    // on the real account.
+    const startParam = getStartParam();
+    if (startParam?.startsWith(DEMO_START_PREFIX)) {
+      demoLogin.mutate(startParam.slice(DEMO_START_PREFIX.length));
+      return;
+    }
     if (!user) {
       login.mutate(getInitData());
     }

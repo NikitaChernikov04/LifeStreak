@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCelebrationStore } from '@/store/useCelebrationStore';
 import { getStartParam } from '@/lib/telegram';
+import { DEMO_START_PREFIX } from '@/hooks/useAuth';
 import type { Invite } from '@/types/api';
 
 export function useMyInvite() {
@@ -54,6 +55,9 @@ export function useRedeemInviteFromLink(enabled: boolean) {
     if (!enabled || attempted.current) return;
     const code = getStartParam();
     if (!code) return;
+    // The same parameter also carries the demo key. Handing that to the invite
+    // endpoint would spend a real invite attempt on a string that is not one.
+    if (code.startsWith(DEMO_START_PREFIX)) return;
     attempted.current = true;
     accept.mutate(code);
     // eslint-disable-next-line react-hooks/exhaustive-deps

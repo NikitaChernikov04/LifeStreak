@@ -31,4 +31,7 @@ export default () => ({
   },
   // Shared with the scheduler that calls the evening digest.
   cronSecret: process.env.CRON_SECRET ?? '',
+  // Opens the demo entrance (POST /auth/demo). Empty means the door does not
+  // exist — see AuthService.loginAsDemo.
+  demoSecret: process.env.DEMO_LOGIN_SECRET ?? '',
 });

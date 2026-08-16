@@ -11,6 +11,8 @@ import { xpIntoCurrentLevel } from '@/lib/leveling';
 
 export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
+  const isDemo = useAuthStore((s) => s.isDemo);
+  const logout = useAuthStore((s) => s.logout);
   const { data: stats } = useStatistics();
 
   if (!user) return null;
@@ -21,6 +23,26 @@ export function ProfilePage() {
   return (
     <Sheet>
       <SheetTitle>Профиль</SheetTitle>
+
+      {/* A session that is not yours should say so, and it should be one tap to
+          leave. The demo survives a reload, which is what a recording needs and
+          exactly why it must not be silent. */}
+      {isDemo && (
+        <div className="mt-4 flex items-center justify-between gap-3 border border-dashed border-ochre/60 px-3 py-2">
+          <p className="font-mono text-micro uppercase text-ochre">
+            Демо-аккаунт · выдуманные данные
+          </p>
+          <button
+            onClick={() => {
+              logout();
+              window.location.href = '/';
+            }}
+            className="entry-action shrink-0 border-ochre text-ochre hover:border-ochre hover:text-ochre"
+          >
+            Выйти
+          </button>
+        </div>
+      )}
 
       <div className="mt-5 flex items-center gap-4">
         <Avatar className="h-16 w-16 shrink-0">
