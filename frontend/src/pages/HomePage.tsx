@@ -60,17 +60,13 @@ export function HomePage() {
           </>
         )}
 
+        {/* No empty state here: an empty list is handled before this renders,
+            by the first-run screen. */}
         <AnimatePresence initial={false}>
           {streaks?.map((streak) => (
             <StreakCard key={streak.id} streak={streak} onShare={setShareStreak} />
           ))}
         </AnimatePresence>
-
-        {!isLoading && streaks?.length === 0 && (
-          <p className="border-b border-ink/15 py-8 text-[0.9375rem] leading-relaxed text-graphite">
-            Лист пока пустой. Заведи первую серию — и завтра тебе будет что не терять.
-          </p>
-        )}
       </div>
 
       <div className="mt-6">
